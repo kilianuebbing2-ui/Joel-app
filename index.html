@@ -7,30 +7,40 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tagwerk">
-<meta name="theme-color" content="#121211">
+<meta name="theme-color" content="#0f131a">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <title>Tagwerk</title>
 <style>
   :root {
-    --bg: #121211;
-    --surface: #1a1a19;
-    --surface-2: #242422;
-    --border: #383835;
-    --text: #f0efec;
-    --text-2: #c3c2b7;
-    --text-3: #8f8e86;
-    --accent: #3987e5;
-    --accent-soft: rgba(57,135,229,.16);
-    --good: #0ca30c;
+    --bg: #0f131a;
+    --surface: #171c25;
+    --surface-2: #212834;
+    --border: #2c3442;
+    --text: #edf0f5;
+    --text-2: #b4bcca;
+    --text-3: #8892a3;
+    --c-school: #8b74f2;
+    --c-food: #1fa968;
+    --c-body: #e8682a;
+    --c-sleep: #2f8fe8;
+    --c-todo: #d99a1e;
+    --c-home: #2f8fe8;
+    --accent: var(--c-home);
+    --good: #1fa968;
     --critical: #e66767;
-    --grid: #2c2c2a;
+    --grid: #252c38;
+    --font-round: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, -apple-system, sans-serif;
     --radius: 14px;
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-t: env(safe-area-inset-top, 0px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body, .area-home { --accent: var(--c-home); }
+  .area-school { --accent: var(--c-school); } .area-food { --accent: var(--c-food); } .area-body { --accent: var(--c-body); }
+  .area-sleep { --accent: var(--c-sleep); } .area-todo { --accent: var(--c-sleep); }
+  body, [class*="area-"] { --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent); }
   body {
     font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     padding-top: var(--safe-t);
@@ -38,8 +48,37 @@
     min-height: 100vh;
   }
   main { max-width: 640px; margin: 0 auto; padding: 16px 16px 24px; }
-  h1 { font-size: 28px; font-weight: 700; margin: 8px 0 2px; letter-spacing: -.02em; }
-  h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); margin: 0 0 10px; }
+  h1 { font-family: var(--font-round); font-size: 30px; font-weight: 700; margin: 8px 0 2px; letter-spacing: -.01em; }
+  h2 { font-family: var(--font-round); font-size: 16px; font-weight: 650; color: var(--text); margin: 0 0 10px; }
+  .ph { display: flex; align-items: center; gap: 12px; }
+  .chip { --c: var(--accent); width: 28px; height: 28px; border-radius: 9px; background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); display: inline-grid; place-items: center; flex: none; }
+  .chip svg { width: 17px; height: 17px; }
+  .ph .chip { width: 38px; height: 38px; border-radius: 12px; } .ph .chip svg { width: 22px; height: 22px; }
+  .chead { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font: 650 16px/1.2 var(--font-round); }
+  .chead .grow { min-width: 0; }
+  .stat .v, .kcal-big, .tile .big { font-family: var(--font-round); }
+  /* Tagesringe */
+  .rings { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .ring { background: none; border: 0; color: var(--text); padding: 4px 0; display: flex; flex-direction: column; align-items: center; cursor: pointer; font: inherit; position: relative; }
+  .ring svg { width: 100%; max-width: 76px; aspect-ratio: 1; display: block; }
+  .ring .rb { fill: none; stroke: color-mix(in srgb, var(--c) 22%, transparent); stroke-width: 7; }
+  .ring .rf { fill: none; stroke: var(--c); stroke-width: 7; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 32px 32px; }
+  .rings.anim .rf { animation: ringIn 1s cubic-bezier(.2,.8,.2,1) both; }
+  .rings.anim .ring:nth-child(2) .rf { animation-delay: .08s; } .rings.anim .ring:nth-child(3) .rf { animation-delay: .16s; } .rings.anim .ring:nth-child(4) .rf { animation-delay: .24s; }
+  @keyframes ringIn { from { stroke-dashoffset: var(--full); } }
+  @media (prefers-reduced-motion: reduce) { .rings.anim .rf { animation: none; } }
+  .ring .rc { position: absolute; top: 4px; left: 0; right: 0; aspect-ratio: 1; max-width: 76px; margin: 0 auto; display: grid; place-items: center; font: 700 15px/1 var(--font-round); font-variant-numeric: tabular-nums; }
+  .ring .rl { font: 650 13px var(--font-round); margin-top: 6px; color: var(--c); }
+  .ring .rs { font-size: 11px; color: var(--text-3); text-align: center; line-height: 1.25; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .tiles .card { margin: 0; }
+  .tile .big { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tile .spark { display: block; width: 100%; height: 44px; margin-top: 10px; }
+  .wdots { display: flex; justify-content: space-between; margin: 4px 0 12px; }
+  .wdot { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 11px; color: var(--text-3); }
+  .wdot i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border); display: block; }
+  .wdot.on i { background: var(--accent); border-color: var(--accent); }
+  .wdot.today { color: var(--text); font-weight: 600; } .wdot.today i { border-color: var(--text-2); }
   .sub { color: var(--text-2); margin: 0 0 18px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; }
   .row { display: flex; gap: 10px; align-items: center; }
@@ -156,7 +195,7 @@
   .restbar { position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-b)); max-width: 616px; margin: 0 auto; background: var(--surface-2); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; z-index: 15; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
   body.resting { padding-bottom: calc(150px + var(--safe-b)); }
   .restbar span { color: var(--text-2); } .restbar b { font-size: 22px; font-variant-numeric: tabular-nums; flex: 1; }
-  .focusbar { position: fixed; top: 0; left: 0; right: 0; padding: calc(8px + var(--safe-t)) 16px 8px; background: #17243a; border-bottom: 1px solid var(--accent); display: flex; align-items: center; gap: 10px; z-index: 12; font-size: 14px; }
+  .focusbar { position: fixed; top: 0; left: 0; right: 0; padding: calc(8px + var(--safe-t)) 16px 8px; background: color-mix(in srgb, var(--c-school) 22%, var(--bg)); border-bottom: 1px solid var(--c-school); display: flex; align-items: center; gap: 10px; z-index: 12; font-size: 14px; }
   .focusbar .fb-t { font-size: 18px; font-variant-numeric: tabular-nums; }
   body.focusing main { padding-top: 64px; }
   .scanner { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; }
@@ -180,7 +219,7 @@
   <button data-tab="todos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6.5" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="5" cy="17.5" r="1.6"/><path d="M10 6.5h10M10 12h10M10 17.5h10"/></svg>Todos</button>
   <button data-tab="school"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/><path d="M22 9v6"/></svg>Schule</button>
   <button data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/></svg>Essen</button>
-  <button data-tab="body"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg>Körper</button>
+  <button data-tab="body"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>Körper</button>
   <button data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>Mehr</button>
 </nav>
 
@@ -190,7 +229,7 @@
 /* ---------- Speicher ---------- */
 const KEY = "tagwerk_v1";
 const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [], plans: [], workouts: [], gymNotes: [], activeWorkout: null, timetable: [], grades: [], focus: [], learnLog: [], focusActive: null, weekNotes: [],
-  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90, focusMin: 25, breakMin: 5, gradeSystem: "noten" } });
+  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90, focusMin: 25, breakMin: 5, gradeSystem: "noten", studyGoal: 50, trainGoal: 3 } });
 const normalize = d => Object.assign(blank(), d && typeof d === "object" ? d : {}, { settings: Object.assign(blank().settings, (d && d.settings) || {}) });
 let db = load();
 function load() {
@@ -579,6 +618,8 @@ function render() {
   if (recovery) { document.body.classList.add("gated"); return renderRecovery(); }
   if (gate) return gate === "login" ? renderLogin() : renderSetup();
   const navKey = tab === "gym" || tab === "weight" || tab === "sleep" ? "body" : tab === "week" ? "home" : tab;
+  document.body.className = document.body.className.replace(/\barea-\w+/g, "").trim();
+  document.body.classList.add("area-" + (({ school: "school", food: "food", gym: "body", weight: "body", sleep: "sleep", todos: "todo" })[tab] || "home"));
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === navKey));
   ({ home: renderHome, todos: renderTodos, food: renderFood, school: renderSchool, gym: renderGym, week: renderWeek, weight: renderWeight, sleep: renderSleep, more: renderMore })[tab]();
 }
@@ -593,74 +634,117 @@ function bindBodyHeader() {
 }
 
 /* ---------- Übersicht ---------- */
+/* ---------- Symbole und kleine Grafiken ---------- */
+const ICONS = {
+  school: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/>',
+  food: '<path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/>',
+  body: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+  weight: '<path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/>',
+  sleep: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  todo: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+  week: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  more: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+};
+const chip = (area, icon) => `<span class="chip" style="--c:var(--c-${area})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[icon || area]}</svg></span>`;
+const cardHead = (area, icon, title, right = "") => `<div class="chead">${chip(area, icon)}<span class="grow">${title}</span>${right}</div>`;
+function ring(pct, area, center, label, sub, goTo) {
+  const C = 2 * Math.PI * 27, off = C * (1 - Math.max(0, Math.min(1, pct || 0)));
+  return `<button class="ring" data-go="${goTo}" style="--c:var(--c-${area})" aria-label="${label}: ${center} ${sub}">
+    <svg viewBox="0 0 64 64"><circle class="rb" cx="32" cy="32" r="27"/><circle class="rf" cx="32" cy="32" r="27" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" style="--full:${C.toFixed(2)}"/></svg>
+    <span class="rc">${center}</span><span class="rl">${label}</span><span class="rs">${sub}</span></button>`;
+}
+function sparkline(vals, color) {
+  if (vals.length < 2) return "";
+  const W = 160, H = 44, mn = Math.min(...vals), mx = Math.max(...vals), span = mx - mn || 1;
+  const pts = vals.map((v, i) => [i / (vals.length - 1) * W, 4 + (1 - (v - mn) / span) * (H - 8)]);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join("");
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${line}L${W} ${H}L0 ${H}Z" fill="${color}" fill-opacity=".14"/>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+function sleepBars7() {
+  const W = 160, H = 44, days = Array.from({ length: 7 }, (_, i) => addDays(today(), i - 6)), map = Object.fromEntries(db.sleep.map(e => [e.date, sleepHours(e)]));
+  const goal = db.settings.sleepGoal || 8, top = Math.max(10, goal + 1), bw = 14, gap = (W - 7 * bw) / 6, Y = v => H - v / top * H;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <line x1="0" x2="${W}" y1="${Y(goal)}" y2="${Y(goal)}" stroke="var(--text-3)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+    ${days.map((d, i) => { const v = map[d], x = i * (bw + gap); return v ? `<rect x="${x}" y="${Y(v)}" width="${bw}" height="${H - Y(v)}" rx="3" fill="var(--c-sleep)" fill-opacity="${d === today() ? 1 : .55}"/>` : `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="var(--border)"/>`; }).join("")}</svg>`;
+}
+
+/* ---------- Übersicht ---------- */
+let homeAnimated = false;
 function renderHome() {
-  const h = new Date().getHours();
+  const h = new Date().getHours(), d = new Date();
   const hi = h < 11 ? "Guten Morgen" : h < 18 ? "Hallo" : "Guten Abend";
-  const d = new Date();
   const open = db.todos.filter(t => !t.done && t.due && t.due <= today()).sort((a, b) => a.due.localeCompare(b.due));
-  const ws = weightStats();
-  const lastSleep = sleepSorted().slice(-1)[0];
-  const s7 = sleepAvg(7);
   const upcoming = db.todos.filter(t => !t.done && t.due && t.due > today()).length;
+  const st = db.settings, tot = dayTotals(today());
+  // Tagesringe
+  const foodPct = st.kcalGoal ? tot.kcal / st.kcalGoal : st.proteinGoal ? tot.p / st.proteinGoal : 0;
+  const studyMin = focusMinutes(today(), today()), studyGoal = st.studyGoal || 50;
+  const wkN = db.workouts.filter(x => x.date >= weekStartIso()).length, trainGoal = st.trainGoal || 3;
+  const sl = db.sleep.find(e => e.date === today()), slH = sl ? sleepHours(sl) : null, slGoal = st.sleepGoal || 8;
+  const anim = !homeAnimated; homeAnimated = true;
+  const ws = weightStats(), wl = weightsSorted().filter(e => e.date >= addDays(today(), -29)), all = weightsSorted();
+  const s7 = sleepAvg(7);
+  const wd = weekdayIdx(today()), ex = upcomingExams(14), dc = dueCards().length, ls = wd < 5 ? lessonsOn(wd) : [];
+  const lastW = workoutsSorted().slice(-1)[0];
   $("#view").innerHTML = `
     <h1>${hi}</h1>
     <p class="sub">${["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"][d.getDay()]}, ${d.getDate()}. ${["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"][d.getMonth()]}</p>
-    ${[0, 1].includes(d.getDay()) ? `<div class="card dash-link" data-go="week" style="border-color:var(--accent)"><div class="row"><div class="grow"><b>${d.getDay() === 0 ? "Deine Woche ist fast geschafft" : "Neue Woche"}</b><div class="small muted">${d.getDay() === 0 ? "Schau dir deinen Wochenrückblick an." : "Schau dir den Rückblick auf letzte Woche an."}</div></div><span class="btn small">Rückblick</span></div></div>` : ""}
 
-    <div class="card">
-      <div class="row"><h2 class="grow">Heute zu erledigen</h2><button class="btn small ghost" data-go="todos">Alle</button></div>
-      ${open.length ? open.map(todoRow).join("") : `<div class="empty">Nichts fällig. ${upcoming ? `${upcoming} Aufgabe${upcoming > 1 ? "n" : ""} demnächst.` : ""}</div>`}
+    <div class="card" style="padding:14px 8px 10px">
+      <div class="rings ${anim ? "anim" : ""}">
+        ${ring(foodPct, "food", st.kcalGoal || !st.proteinGoal ? round(tot.kcal) : `${round(tot.p)} g`, "Essen", st.kcalGoal ? `von ${st.kcalGoal} kcal` : st.proteinGoal ? `von ${st.proteinGoal} g Protein` : "kcal heute", "food")}
+        ${ring(studyMin / studyGoal, "school", studyMin, "Lernen", `von ${studyGoal} min`, "school")}
+        ${ring(wkN / trainGoal, "body", `${wkN}/${trainGoal}`, "Training", db.activeWorkout ? "läuft gerade" : "diese Woche", "gym")}
+        ${ring(slH != null ? slH / slGoal : 0, "sleep", slH != null ? `${Math.floor(slH)}:${pad(Math.round(slH % 1 * 60))}` : "–", "Schlaf", slH != null ? `von ${fmt(slGoal, slGoal % 1 ? 1 : 0)} h` : "noch eintragen", "sleep")}
+      </div>
     </div>
 
-    ${(() => { const ex = upcomingExams(14), dc = dueCards().length, wd = weekdayIdx(today()), ls = wd < 5 ? lessonsOn(wd) : [];
-      if (!ex.length && !dc && !ls.length) return "";
-      return `<div class="card dash-link" data-go="school"><h2>Schule</h2>
-        ${ls.length ? `<div class="group-title">Heute</div>${ls.map(l => lessonRow(l)).join("")}${ex.length ? `<div class="group-title" style="margin-top:10px">Termine</div>` : ""}` : ""}
-        ${ex.slice(0, 3).map(e => examRow(e)).join("")}
-        ${dc ? `<div class="small" style="margin-top:${ex.length ? 8 : 0}px"><span style="color:var(--accent)">${dc} Karteikarte${dc > 1 ? "n" : ""}</span> heute fällig</div>` : ""}</div>`; })()}
+    ${db.activeWorkout ? `<div class="card area-body dash-link" data-go="gym" style="border-color:var(--c-body)">${cardHead("body", "body", `${esc(db.activeWorkout.planName)} läuft`, `<span class="btn small">Weiter</span>`)}<div class="small muted" style="margin-top:-6px">seit ${minsSince(db.activeWorkout.start)} min</div></div>` : ""}
+    ${[0, 1].includes(d.getDay()) ? `<div class="card dash-link" data-go="week" style="border-color:var(--c-home)">${cardHead("home", "week", d.getDay() === 0 ? "Deine Woche ist fast geschafft" : "Neue Woche, neuer Plan", `<span class="btn small">Rückblick</span>`)}<div class="small muted" style="margin-top:-6px">${d.getDay() === 0 ? "Schau dir an, was du diese Woche geschafft hast." : "Schau dir an, wie letzte Woche lief."}</div></div>` : ""}
 
-    <div class="card dash-link" data-go="food">
-      <h2>Ernährung heute</h2>
+    <div class="card area-todo">
+      ${cardHead("todo", "todo", "Heute zu erledigen", `<button class="btn small ghost" data-go="todos">Alle</button>`)}
+      ${open.length ? open.map(todoRow).join("") : `<div class="empty">Nichts fällig.${upcoming ? ` ${upcoming} Aufgabe${upcoming > 1 ? "n" : ""} demnächst.` : ""}</div>`}
+    </div>
+
+    ${ex.length || dc || ls.length ? `<div class="card area-school dash-link" data-go="school">
+      ${cardHead("school", "school", "Schule", dc ? `<span class="tag" style="border-color:var(--c-school);color:var(--text)">${dc} Karte${dc > 1 ? "n" : ""} fällig</span>` : "")}
+      ${ls.length ? `<div class="group-title">Heute</div>${ls.map(l => lessonRow(l)).join("")}` : ""}
+      ${ex.length ? `<div class="group-title" style="margin-top:${ls.length ? 10 : 0}px">Termine</div>${ex.slice(0, 3).map(e => examRow(e)).join("")}` : ""}
+    </div>` : ""}
+
+    <div class="card area-food dash-link" data-go="food">
+      ${cardHead("food", "food", "Ernährung heute")}
       ${nutritionSummary(today(), true)}
     </div>
 
-    <div class="card dash-link" data-go="weight">
-      <h2>Gewicht</h2>
-      ${ws ? `
-        <div class="stats">
-          <div class="stat"><div class="v">${fmt(ws.last.kg)}</div><div class="l">zuletzt (kg)</div></div>
-          <div class="stat"><div class="v">${fmt(ws.avg)}</div><div class="l">Ø 7 Tage</div></div>
-          <div class="stat"><div class="v">${ws.perWeek == null ? "–" : (ws.perWeek > 0 ? "+" : "") + fmt(ws.perWeek)}</div><div class="l">pro Woche</div></div>
-        </div>
-        <div class="chart" id="dashW" style="margin-top:12px"></div>`
-      : `<div class="empty">Noch keine Einträge. Tippe hier, um dein Gewicht einzutragen.</div>`}
+    <div class="tiles">
+      <div class="card tile area-body dash-link" data-go="weight">
+        ${cardHead("body", "weight", "Gewicht")}
+        ${ws ? `<div class="big">${fmt(ws.avg)} <span class="small muted" style="font-weight:400">kg Ø</span></div>
+          <div class="small muted">${ws.perWeek == null ? "Trend ab 2 Wochen" : `${ws.perWeek > 0 ? "+" : ""}${fmt(ws.perWeek)} kg pro Woche`}</div>
+          ${sparkline(wl.map(e => avg7(all, e.date)), "var(--c-body)")}` : `<div class="small muted">Noch keine Einträge. Tippe, um dein Gewicht einzutragen.</div>`}
+      </div>
+      <div class="card tile area-sleep dash-link" data-go="sleep">
+        ${cardHead("sleep", "sleep", "Schlaf")}
+        ${s7 != null ? `<div class="big">${fmt(s7)} <span class="small muted" style="font-weight:400">h Ø</span></div>
+          <div class="small muted">letzte 7 Nächte</div>${sleepBars7()}` : `<div class="small muted">Noch keine Einträge. Tippe, um deinen Schlaf einzutragen.</div>`}
+      </div>
     </div>
 
-    <div class="card dash-link" data-go="sleep">
-      <h2>Schlaf</h2>
-      ${lastSleep ? `
-        <div class="stats">
-          <div class="stat"><div class="v">${hm(sleepHours(lastSleep)).replace(" min", "")}</div><div class="l">${lastSleep.date === today() ? "letzte Nacht" : "zuletzt, " + short(lastSleep.date)}</div></div>
-          <div class="stat"><div class="v">${s7 == null ? "–" : fmt(s7)} h</div><div class="l">Ø 7 Tage</div></div>
-          <div class="stat"><div class="v">${lastSleep.quality ? lastSleep.quality + "/5" : "–"}</div><div class="l">Gefühl</div></div>
-        </div>`
-      : `<div class="empty">Noch keine Einträge. Tippe hier, um deinen Schlaf einzutragen.</div>`}
+    <div class="card area-body dash-link" data-go="gym">
+      ${cardHead("body", "body", "Training diese Woche", `<span class="small muted">${wkN} von ${trainGoal}</span>`)}
+      <div class="wdots">${DAYS.concat(["Sa", "So"]).map((n, i) => { const dd = addDays(weekStartIso(), i); return `<div class="wdot ${db.workouts.some(w => w.date === dd) ? "on" : ""} ${dd === today() ? "today" : ""}"><i></i>${n}</div>`; }).join("")}</div>
+      <div class="small muted">${lastW ? `Zuletzt: ${esc(lastW.planName || "Training")}, ${relDay(lastW.date)}` : "Noch kein Training. Tippe, um loszulegen."}</div>
     </div>
 
-    <div class="card dash-link" data-go="gym">
-      <h2>Training</h2>
-      ${db.activeWorkout ? `<div class="row"><div class="grow"><b>${esc(db.activeWorkout.planName)}</b> läuft seit ${minsSince(db.activeWorkout.start)} min</div><span class="btn small">Fortsetzen</span></div>`
-        : (() => { const w = workoutsSorted().slice(-1)[0], wk = db.workouts.filter(x => x.date >= weekStartIso()).length;
-          return w ? `<div class="stats"><div class="stat"><div class="v">${wk}</div><div class="l">diese Woche</div></div>
-              <div class="stat" style="grid-column:span 2"><div class="v" style="font-size:17px;padding-top:4px">${esc(w.planName || "Training")}</div><div class="l">zuletzt ${relDay(w.date)}</div></div></div>`
-            : `<div class="empty">Noch kein Training. Tippe hier, um loszulegen.</div>`; })()}
-    </div>
     <button class="btn ghost" data-go="week" style="width:100%">Wochenrückblick ansehen</button>`;
   bindTodoEvents(); bindLessons();
   $("#view").querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", e => {
-    if (e.target.closest(".check")) return; go(el.dataset.go);
+    if (e.target.closest(".check")) return; e.stopPropagation(); go(el.dataset.go);
   }));
-  if (ws) weightChart($("#dashW"), weightsSorted().filter(e => e.date >= addDays(today(), -29)), { mini: true });
 }
 
 /* ---------- Todos ---------- */
@@ -701,7 +785,7 @@ function renderTodos() {
   groups.forEach(g => g[1].sort((a, b) => (a.due || "").localeCompare(b.due || "")));
   const done = db.todos.filter(t => t.done).sort((a, b) => (b.doneAt || "").localeCompare(a.doneAt || ""));
   $("#view").innerHTML = `
-    <h1>Todos</h1><p class="sub">${open.length} offen</p>
+    <h1 class="ph">${chip("todo", "todo")}Todos</h1><p class="sub">${open.length} offen</p>
     <form class="card" id="todoForm">
       <input id="tText" placeholder="Neue Aufgabe …" autocomplete="off" required>
       <div class="row" style="margin-top:10px">
@@ -1446,7 +1530,7 @@ function renderSchool() {
   schoolSub = null;
   const ex = upcomingExams(), due = dueCards().length;
   $("#view").innerHTML = `
-    <h1>Schule</h1><p class="sub">${due ? `${due} Karteikarte${due > 1 ? "n" : ""} heute fällig` : "Fächer, Dateien, Karteikarten und Termine"}</p>
+    <h1 class="ph">${chip("school")}Schule</h1><p class="sub">${due ? `${due} Karteikarte${due > 1 ? "n" : ""} heute fällig` : "Fächer, Dateien, Karteikarten und Termine"}</p>
     <div class="card"><h2>Nächste Termine</h2>${ex.length ? ex.slice(0, 6).map(e => examRow(e)).join("") : `<div class="empty">Keine Termine. Du legst sie im jeweiligen Fach an.</div>`}</div>
     <div class="card"><h2>Fächer</h2>
       ${db.subjects.length ? db.subjects.map(s => {
@@ -2097,7 +2181,7 @@ function renderWeek() {
 function renderMore() {
   const s = db.settings;
   $("#view").innerHTML = `
-    <h1>Mehr</h1><p class="sub">Konto, Ziele, KI und Backup.</p>
+    <h1 class="ph">${chip("home", "more")}Mehr</h1><p class="sub">Konto, Ziele, KI und Backup.</p>
     <div class="card"><h2>Konto</h2>
       ${loggedIn() ? `<div class="row"><div class="grow"><div>${esc(session.user.email)}</div><div class="small muted" id="syncState">${syncLabel()}</div></div></div>
         <div class="row" style="margin-top:12px"><button class="btn ghost grow" id="syncNow">Synchronisieren</button><button class="btn ghost grow" id="logout">Abmelden</button></div>`
@@ -2132,6 +2216,8 @@ function renderMore() {
         <div class="grow"><label class="f">Kohlenhydrate (g)</label><input id="gC" inputmode="numeric" placeholder="optional" value="${s.carbGoal || ""}"></div>
         <div class="grow"><label class="f">Fett (g)</label><input id="gF" inputmode="numeric" placeholder="optional" value="${s.fatGoal || ""}"></div>
       </div>
+      <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Lernen pro Tag (min)</label><input id="gL" inputmode="numeric" value="${s.studyGoal || 50}"></div>
+        <div class="grow"><label class="f">Trainings pro Woche</label><input id="gT" inputmode="numeric" value="${s.trainGoal || 3}"></div></div>
       <div style="margin-top:10px"><label class="f">Pause zwischen Sätzen (Sekunden)</label><input id="gR" inputmode="numeric" value="${s.restSec || 90}"></div>
       <div class="row" style="margin-top:12px"><button class="btn grow" type="submit">Ziele speichern</button></div>
     </form>
@@ -2174,7 +2260,7 @@ function renderMore() {
     s.goalWeight = g && g > 20 ? Math.round(g * 10) / 10 : null;
     s.sleepGoal = sg && sg > 0 && sg < 16 ? sg : 8;
     const pos = id => { const v = num($(id).value); return v && v > 0 ? Math.round(v) : null; };
-    s.restSec = pos("#gR") || 90; s.kcalGoal = pos("#gK"); s.proteinGoal = pos("#gP"); s.carbGoal = pos("#gC"); s.fatGoal = pos("#gF");
+    s.restSec = pos("#gR") || 90; s.studyGoal = Math.min(600, pos("#gL") || 50); s.trainGoal = Math.min(14, pos("#gT") || 3); s.kcalGoal = pos("#gK"); s.proteinGoal = pos("#gP"); s.carbGoal = pos("#gC"); s.fatGoal = pos("#gF");
     save(); toast("Ziele gespeichert");
   });
   $("#grade").addEventListener("change", e => { s.grade = e.target.value.trim(); save(); toast("Gespeichert"); });
