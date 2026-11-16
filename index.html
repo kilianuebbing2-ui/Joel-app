@@ -119,7 +119,7 @@
   .soon:first-of-type { border-top: 0; }
   .pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
   .dash-link { cursor: pointer; }
-  .toast { max-width: 90vw; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: fixed; left: 50%; bottom: calc(90px + var(--safe-b)); transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 99px; font-size: 14px; display: none; z-index: 20; }
+  .toast { max-width: 90vw; width: max-content; text-align: center; position: fixed; left: 50%; bottom: calc(90px + var(--safe-b)); transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 18px; font-size: 14px; display: none; z-index: 60; }
   [hidden] { display: none !important; }
   body.gated nav.tabs { display: none; }
   body.gated { padding-bottom: 24px; }
@@ -156,12 +156,23 @@
   .restbar { position: fixed; left: 12px; right: 12px; bottom: calc(80px + var(--safe-b)); max-width: 616px; margin: 0 auto; background: var(--surface-2); border: 1px solid var(--accent); border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; gap: 12px; z-index: 15; box-shadow: 0 6px 24px rgba(0,0,0,.5); }
   body.resting { padding-bottom: calc(150px + var(--safe-b)); }
   .restbar span { color: var(--text-2); } .restbar b { font-size: 22px; font-variant-numeric: tabular-nums; flex: 1; }
+  .focusbar { position: fixed; top: 0; left: 0; right: 0; padding: calc(8px + var(--safe-t)) 16px 8px; background: #17243a; border-bottom: 1px solid var(--accent); display: flex; align-items: center; gap: 10px; z-index: 12; font-size: 14px; }
+  .focusbar .fb-t { font-size: 18px; font-variant-numeric: tabular-nums; }
+  body.focusing main { padding-top: 64px; }
+  .scanner { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; flex-direction: column; }
+  .sc-top { display: flex; align-items: center; justify-content: space-between; padding: calc(10px + var(--safe-t)) 16px 10px; color: #fff; }
+  .sc-cam { position: relative; flex: 1; overflow: hidden; min-height: 200px; }
+  .sc-cam video { width: 100%; height: 100%; object-fit: cover; }
+  .sc-frame { position: absolute; left: 10%; right: 10%; top: 32%; bottom: 32%; border: 2px solid var(--accent); border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); }
+  .sc-panel { background: var(--surface); border-top: 1px solid var(--border); padding: 16px 16px calc(16px + var(--safe-b)); }
+  body.scanning { overflow: hidden; }
   .ok-box { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
 </style>
 </head>
 <body>
 <main id="view"></main>
 <div class="toast" id="toast"></div>
+<div class="focusbar" id="focusBar" hidden><span class="fb-l grow"></span><b class="fb-t"></b><button class="btn small fb-next" hidden>Nächste Runde</button><button class="btn small ghost fb-stop">Beenden</button></div>
 <div class="restbar" id="restBar" hidden><span>Pause</span><b>1:30</b><button class="btn small ghost" onclick="restUntil=0;tickRest()">Überspringen</button></div>
 
 <nav class="tabs" id="tabs">
@@ -178,8 +189,8 @@
 "use strict";
 /* ---------- Speicher ---------- */
 const KEY = "tagwerk_v1";
-const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [], plans: [], workouts: [], gymNotes: [], activeWorkout: null,
-  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90 } });
+const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [], plans: [], workouts: [], gymNotes: [], activeWorkout: null, timetable: [], grades: [], focus: [], learnLog: [], focusActive: null, weekNotes: [],
+  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90, focusMin: 25, breakMin: 5, gradeSystem: "noten" } });
 const normalize = d => Object.assign(blank(), d && typeof d === "object" ? d : {}, { settings: Object.assign(blank().settings, (d && d.settings) || {}) });
 let db = load();
 function load() {
@@ -247,12 +258,13 @@ function sleepAvg(days) {
 
 /* ---------- Konto & Sync (Supabase) ---------- */
 const CFG = window.TAGWERK_CONFIG || {};
-const SB_URL = String(CFG.supabaseUrl || "").trim().replace(/\/+$/, ""), SB_KEY = String(CFG.supabaseKey || "").trim();
+const SB_URL = String(CFG.supabaseUrl || "").trim().replace(/\/+$/, "").replace(/\/(rest|auth|storage)\/v1$/i, ""), SB_KEY = String(CFG.supabaseKey || "").trim();
 const cloudOn = !!(SB_URL && SB_KEY);
 const SKEY = "tagwerk_session", MKEY = "tagwerk_sync";
 const readJSON = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
 let session = cloudOn ? readJSON(SKEY) : null;
 let syncMeta = Object.assign({ lastSynced: null, dirty: false, owner: null, lastOk: null }, readJSON(MKEY) || {});
+let pendingHashLogin = null;
 let syncState = "idle", syncTimer = null, syncing = null, syncAgain = false, pendingRender = false, refreshing = null;
 const saveMeta = () => { try { localStorage.setItem(MKEY, JSON.stringify(syncMeta)); } catch (e) {} };
 const saveSession = () => { if (session) localStorage.setItem(SKEY, JSON.stringify(session)); else localStorage.removeItem(SKEY); };
@@ -315,6 +327,7 @@ function mergeData(local, remote) {
   });
   const def = blank().settings; Object.keys(L.settings).forEach(k => { if (L.settings[k] !== def[k]) out.settings[k] = L.settings[k]; });
   out.activeWorkout = L.activeWorkout || out.activeWorkout;
+  out.focusActive = L.focusActive || out.focusActive;
   return out;
 }
 function setSyncState(st) { syncState = st; const el = $("#syncState"); if (el) el.innerHTML = syncLabel(); }
@@ -356,7 +369,7 @@ async function doSync() {
     }
     syncMeta.lastOk = Date.now(); saveMeta(); setSyncState("ok");
     if (changed) safeRender();
-    uploadPendingFiles();
+    uploadPendingFiles(); pullInbox();
   } catch (e) {
     if (!session) return;
     setSyncState(navigator.onLine === false || /fetch|network|load failed/i.test(e.message) ? "offline" : "error");
@@ -370,6 +383,37 @@ function safeRender() {
   render();
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (pendingRender && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || "")) { pendingRender = false; render(); } }, 50));
+
+// Schlafwerte, die der Kurzbefehl (Apple Health) geschickt hat, abholen und eintragen
+let inboxMissing = false, inboxBusy = false;
+async function pullInbox() {
+  if (!loggedIn() || inboxMissing || inboxBusy) return; inboxBusy = true;
+  try {
+    const r = await sbFetch("/rest/v1/inbox?select=id,kind,payload&order=id.asc");
+    if (r.status === 404) { inboxMissing = true; return; } // Update-SQL noch nicht ausgeführt
+    if (!r.ok) return;
+    const rows = await r.json(); if (!rows.length) return;
+    const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`; let n = 0;
+    rows.forEach(x => {
+      if (x.kind !== "sleep" || !x.payload) return;
+      const st = new Date(x.payload.start), en = new Date(x.payload.end); if (isNaN(st) || isNaN(en)) return;
+      const date = iso(en), ex = db.sleep.find(e => e.date === date);
+      if (ex && ex.source !== "health") return; // Eigene Einträge werden nicht überschrieben
+      db.sleep = db.sleep.filter(e => e.date !== date);
+      db.sleep.push({ date, bed: hhmm(st), wake: hhmm(en), quality: ex ? ex.quality : null, source: "health" }); n++;
+    });
+    const del = await sbFetch(`/rest/v1/inbox?id=in.(${rows.map(x => +x.id).join(",")})`, { method: "DELETE" });
+    if (n) { save(); safeRender(); }
+    if (!del.ok) console.warn("Posteingang konnte nicht geleert werden", del.status);
+  } catch (e) {} finally { inboxBusy = false; }
+}
+async function setupShortcutToken() {
+  const a = new Uint8Array(24); crypto.getRandomValues(a);
+  const token = [...a].map(b => b.toString(16).padStart(2, "0")).join("");
+  const r = await sbFetch("/rest/v1/shortcut_tokens?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ user_id: session.user.id, token }) });
+  if (!r.ok) throw new Error(r.status === 404 ? "Führe zuerst die Datei supabase-update.sql im SQL Editor von Supabase aus." : `Fehler ${r.status}`);
+  db.settings.shortcutToken = token; inboxMissing = false; save();
+}
 
 // Schuldateien im Supabase-Speicher (Ordner pro Konto)
 const storagePath = id => `/storage/v1/object/files/${session.user.id}/${id}`;
@@ -416,16 +460,61 @@ function clearLocalAccountData() {
 }
 function forceLogout(msg) {
   // Token abgelaufen: Daten bleiben auf dem Gerät, nur neu anmelden
-  session = null; saveSession(); loginMsg = msg; render();
+  session = null; saveSession(); loginMode = "login"; loginMsg = msg; render();
 }
 async function logout() {
   if (syncMeta.dirty) { await sync(); if (syncMeta.dirty && !confirm("Einige Änderungen sind noch nicht im Konto gespeichert (offline?). Trotzdem abmelden? Sie gehen dann verloren.")) return; }
   else if (!confirm("Abmelden? Die Daten werden von diesem Gerät entfernt und bleiben in deinem Konto.")) return;
   try { await sbFetch("/auth/v1/logout", { method: "POST" }); } catch (e) {}
-  clearLocalAccountData(); tab = "home"; render();
+  clearLocalAccountData(); tab = "home"; loginMode = "login"; loginMsg = ""; render();
 }
 
-let loginMode = "login", loginMsg = "";
+let loginMode = "login", loginMsg = "", recovery = null;
+// Links aus E-Mails (Passwort zurücksetzen, E-Mail bestätigen) bringen die Anmeldung im #-Teil der Adresse mit
+function readAuthHash() {
+  if (!cloudOn || !location.hash || location.hash.length < 2) return;
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.get("access_token") && !h.get("error")) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (h.get("error")) { loginMsg = /expired/i.test(h.get("error_code") || h.get("error_description") || "") ? "Der Link ist abgelaufen. Fordere einen neuen an." : "Der Link funktioniert nicht mehr. Fordere einen neuen an."; return; }
+  const tok = { access_token: h.get("access_token"), refresh_token: h.get("refresh_token"), expires_in: +h.get("expires_in") || 3600, expires_at: +h.get("expires_at") || 0 };
+  if (h.get("type") === "recovery") recovery = tok;
+  else pendingHashLogin = tok;
+}
+readAuthHash();
+window.addEventListener("hashchange", () => { readAuthHash(); if (pendingHashLogin && !session) { const t = pendingHashLogin; pendingHashLogin = null; loginFromLink(t); } else render(); });
+async function userFor(token) {
+  const r = await fetch(SB_URL + "/auth/v1/user", { headers: { apikey: SB_KEY, Authorization: "Bearer " + token } });
+  if (!r.ok) throw new Error("Anmeldung über den Link fehlgeschlagen.");
+  return r.json();
+}
+async function loginFromLink(tok) {
+  try { const u = await userFor(tok.access_token); setSession(Object.assign({}, tok, { user: u })); toast("E-Mail bestätigt, du bist angemeldet"); await afterLogin(); }
+  catch (e) { loginMsg = e.message; render(); }
+}
+function renderRecovery() {
+  $("#view").innerHTML = `<div style="text-align:center;margin:40px 0 24px"><img src="icon-180.png" alt="" width="72" height="72" style="border-radius:18px"><h1 style="margin-top:12px">Neues Passwort</h1></div>
+    <form class="card" id="recForm">
+      <label class="f">Neues Passwort</label><input type="password" id="rPw" autocomplete="new-password" minlength="6" required>
+      <label class="f" style="margin-top:10px">Wiederholen</label><input type="password" id="rPw2" autocomplete="new-password" minlength="6" required>
+      <div class="small" id="rMsg" style="margin-top:10px;color:var(--critical)"></div>
+      <button class="btn" type="submit" id="rBtn" style="width:100%;margin-top:6px">Passwort speichern</button>
+    </form>`;
+  $("#recForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const pw = $("#rPw").value, msg = $("#rMsg"), btn = $("#rBtn");
+    if (pw !== $("#rPw2").value) { msg.textContent = "Die Passwörter stimmen nicht überein."; return; }
+    btn.disabled = true; btn.textContent = "Bitte warten …";
+    try {
+      const r = await fetch(SB_URL + "/auth/v1/user", { method: "PUT", headers: { apikey: SB_KEY, Authorization: "Bearer " + recovery.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
+      let j = null; try { j = await r.json(); } catch (x) {}
+      if (!r.ok) throw new Error(authError(j, r.status));
+      const tok = recovery; recovery = null;
+      setSession(Object.assign({}, tok, { user: j && j.id ? j : await userFor(tok.access_token) }));
+      toast("Passwort geändert"); await afterLogin();
+    } catch (err) { msg.textContent = err.message; btn.disabled = false; btn.textContent = "Passwort speichern"; }
+  });
+}
 function renderLogin() {
   $("#view").innerHTML = `
     <div style="text-align:center;margin:40px 0 24px"><img src="icon-180.png" alt="" width="72" height="72" style="border-radius:18px">
@@ -437,8 +526,20 @@ function renderLogin() {
       <div class="small" id="lMsg" style="margin-top:10px;color:var(--critical)">${esc(loginMsg)}</div>
       <button class="btn" type="submit" id="lBtn" style="width:100%;margin-top:6px">${loginMode === "login" ? "Anmelden" : "Konto erstellen"}</button>
     </form>
+    ${loginMode === "login" ? `<div style="text-align:center;margin:-4px 0 12px"><button class="btn small ghost" id="lForgot" style="border:0;background:none;color:var(--text-2)">Passwort vergessen?</button></div>` : ""}
     <div style="text-align:center"><button class="btn small ghost" id="lSwitch">${loginMode === "login" ? "Noch kein Konto? Registrieren" : "Schon ein Konto? Anmelden"}</button></div>
     ${Object.keys(blank()).some(k => Array.isArray(db[k]) && db[k].length) && !syncMeta.owner ? `<p class="small muted" style="text-align:center;margin-top:18px">Die Daten, die schon auf diesem iPhone sind, werden nach der Anmeldung in dein Konto übernommen.</p>` : ""}`;
+  const fg = $("#lForgot");
+  if (fg) fg.addEventListener("click", async () => {
+    const email = $("#lEmail").value.trim(), msg = $("#lMsg");
+    if (!email) { msg.style.color = "var(--critical)"; msg.textContent = "Trag oben deine E-Mail ein und tippe dann nochmal auf „Passwort vergessen?“."; $("#lEmail").focus(); return; }
+    fg.disabled = true;
+    try {
+      await authCall("/auth/v1/recover?redirect_to=" + encodeURIComponent(location.origin + location.pathname), { email });
+      msg.style.color = "var(--text-2)"; msg.textContent = "Wenn es ein Konto mit dieser E-Mail gibt, kommt gleich eine E-Mail mit einem Link. Öffne ihn und vergib ein neues Passwort.";
+    } catch (err) { msg.style.color = "var(--critical)"; msg.textContent = err.message; }
+    fg.disabled = false;
+  });
   $("#lSwitch").addEventListener("click", () => { loginMode = loginMode === "login" ? "signup" : "login"; loginMsg = ""; render(); });
   $("#loginForm").addEventListener("submit", async e => {
     e.preventDefault();
@@ -451,7 +552,7 @@ function renderLogin() {
         if (!j.access_token) { loginMode = "login"; loginMsg = ""; render(); $("#lEmail").value = email; $("#lMsg").style.color = "var(--text-2)"; $("#lMsg").textContent = "Fast geschafft: Bestätige den Link in deiner E-Mail und melde dich dann hier an."; return; }
         setSession(j);
       } else setSession(await authCall("/auth/v1/token?grant_type=password", { email, password: pw }));
-      loginMsg = ""; toast("Angemeldet"); await afterLogin();
+      loginMsg = ""; loginMode = "login"; toast("Angemeldet"); await afterLogin();
     } catch (err) { msg.textContent = err.message; btn.disabled = false; btn.textContent = loginMode === "login" ? "Anmelden" : "Konto erstellen"; }
   });
 }
@@ -471,14 +572,15 @@ let tab = "home", lastBody = "gym";
 document.getElementById("tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab === "body" ? lastBody : b.dataset.tab);
 });
-function go(t) { if (t === "food" && tab !== "food") { fDate = null; fLastSaved = null; } if (t === "school" && tab !== "school") schoolLearn = null; tab = t; if (t === "gym" || t === "weight" || t === "sleep") lastBody = t; render(); window.scrollTo(0, 0); }
+function go(t) { if (t === "week" && tab !== "week") { weekOff = weekdayIdx(today()) === 0 ? 1 : 0; weekKiText = ""; } if (t === "food" && tab !== "food") { fDate = null; fLastSaved = null; } if (t === "school" && tab !== "school") schoolLearn = null; tab = t; if (t === "gym" || t === "weight" || t === "sleep") lastBody = t; render(); window.scrollTo(0, 0); }
 function render() {
   const gate = cloudOn ? (session ? null : "login") : (localStorage.getItem("tagwerk_nocloud") === "1" ? null : "setup");
   document.body.classList.toggle("gated", !!gate);
+  if (recovery) { document.body.classList.add("gated"); return renderRecovery(); }
   if (gate) return gate === "login" ? renderLogin() : renderSetup();
-  const navKey = tab === "gym" || tab === "weight" || tab === "sleep" ? "body" : tab;
+  const navKey = tab === "gym" || tab === "weight" || tab === "sleep" ? "body" : tab === "week" ? "home" : tab;
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === navKey));
-  ({ home: renderHome, todos: renderTodos, food: renderFood, school: renderSchool, gym: renderGym, weight: renderWeight, sleep: renderSleep, more: renderMore })[tab]();
+  ({ home: renderHome, todos: renderTodos, food: renderFood, school: renderSchool, gym: renderGym, week: renderWeek, weight: renderWeight, sleep: renderSleep, more: renderMore })[tab]();
 }
 function bodyHeader(active) {
   return `<div class="row" style="margin:8px 0 18px"><div class="seg grow" id="bodySeg" style="display:flex">
@@ -503,14 +605,17 @@ function renderHome() {
   $("#view").innerHTML = `
     <h1>${hi}</h1>
     <p class="sub">${["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"][d.getDay()]}, ${d.getDate()}. ${["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"][d.getMonth()]}</p>
+    ${[0, 1].includes(d.getDay()) ? `<div class="card dash-link" data-go="week" style="border-color:var(--accent)"><div class="row"><div class="grow"><b>${d.getDay() === 0 ? "Deine Woche ist fast geschafft" : "Neue Woche"}</b><div class="small muted">${d.getDay() === 0 ? "Schau dir deinen Wochenrückblick an." : "Schau dir den Rückblick auf letzte Woche an."}</div></div><span class="btn small">Rückblick</span></div></div>` : ""}
 
     <div class="card">
       <div class="row"><h2 class="grow">Heute zu erledigen</h2><button class="btn small ghost" data-go="todos">Alle</button></div>
       ${open.length ? open.map(todoRow).join("") : `<div class="empty">Nichts fällig. ${upcoming ? `${upcoming} Aufgabe${upcoming > 1 ? "n" : ""} demnächst.` : ""}</div>`}
     </div>
 
-    ${(() => { const ex = upcomingExams(14), dc = dueCards().length; if (!ex.length && !dc) return "";
+    ${(() => { const ex = upcomingExams(14), dc = dueCards().length, wd = weekdayIdx(today()), ls = wd < 5 ? lessonsOn(wd) : [];
+      if (!ex.length && !dc && !ls.length) return "";
       return `<div class="card dash-link" data-go="school"><h2>Schule</h2>
+        ${ls.length ? `<div class="group-title">Heute</div>${ls.map(l => lessonRow(l)).join("")}${ex.length ? `<div class="group-title" style="margin-top:10px">Termine</div>` : ""}` : ""}
         ${ex.slice(0, 3).map(e => examRow(e)).join("")}
         ${dc ? `<div class="small" style="margin-top:${ex.length ? 8 : 0}px"><span style="color:var(--accent)">${dc} Karteikarte${dc > 1 ? "n" : ""}</span> heute fällig</div>` : ""}</div>`; })()}
 
@@ -549,8 +654,9 @@ function renderHome() {
           return w ? `<div class="stats"><div class="stat"><div class="v">${wk}</div><div class="l">diese Woche</div></div>
               <div class="stat" style="grid-column:span 2"><div class="v" style="font-size:17px;padding-top:4px">${esc(w.planName || "Training")}</div><div class="l">zuletzt ${relDay(w.date)}</div></div></div>`
             : `<div class="empty">Noch kein Training. Tippe hier, um loszulegen.</div>`; })()}
-    </div>`;
-  bindTodoEvents();
+    </div>
+    <button class="btn ghost" data-go="week" style="width:100%">Wochenrückblick ansehen</button>`;
+  bindTodoEvents(); bindLessons();
   $("#view").querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", e => {
     if (e.target.closest(".check")) return; go(el.dataset.go);
   }));
@@ -805,7 +911,7 @@ function renderSleep() {
     </div></div>` : ""}
     <div class="card"><h2>Letzte 14 Nächte</h2><div class="chart" id="sChart"></div></div>
     <div class="card"><h2>Einträge</h2>
-      ${l.length ? [...l].reverse().slice(0, 60).map(e => `<div class="entry"><span class="grow">${short(e.date)} <span class="muted small">${e.bed}–${e.wake}</span></span><b>${hm(sleepHours(e))}</b><button class="icon-btn" data-del="${e.date}" aria-label="Löschen">✕</button></div>`).join("") : `<div class="empty">Noch keine Einträge.</div>`}
+      ${l.length ? [...l].reverse().slice(0, 60).map(e => `<div class="entry"><span class="grow">${short(e.date)} <span class="muted small">${e.bed}–${e.wake}${e.source === "health" ? " · Health" : ""}</span></span><b>${hm(sleepHours(e))}</b><button class="icon-btn" data-del="${e.date}" aria-label="Löschen">✕</button></div>`).join("") : `<div class="empty">Noch keine Einträge.</div>`}
     </div>`;
   bindBodyHeader();
   const prev = () => { const b = $("#sBed").value, w = $("#sWake").value; $("#sPreview").textContent = b && w ? "Dauer: " + hm(sleepHours({ bed: b, wake: w })) : ""; };
@@ -922,7 +1028,7 @@ function renderFood() {
         <textarea id="fAns" placeholder="… oder die Antwort hier hineinkopieren" style="margin-top:8px"></textarea>
       </div></div>
       <div id="fEditWrap"></div>
-      <div class="row" style="margin-top:12px"><button class="btn small ghost grow" id="fManual">Ohne KI manuell eintragen</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn small ghost grow" id="fScan">Barcode scannen</button><button class="btn small ghost grow" id="fManual">Manuell eintragen</button></div>
       ${fLastSaved ? `<div class="ok-box"><div class="row"><span class="grow">Gespeichert: <b>${esc(fLastSaved.name || "Mahlzeit")}</b>, ${fLastSaved.kcal} kcal</span>
         <button class="btn small" id="fYazioLast">Für Yazio kopieren</button></div></div>` : ""}
     </div>
@@ -971,6 +1077,7 @@ function renderFood() {
   });
   $("#fAns").addEventListener("input", e => { if (parseFood(e.target.value)) tryParse(e.target.value); });
   $("#fManual").addEventListener("click", () => showEditor({}));
+  $("#fScan").addEventListener("click", openScanner);
   const yl = $("#fYazioLast"); if (yl) yl.addEventListener("click", () => copyText(yazioText(fLastSaved)).then(ok => toast(ok ? "Für Yazio kopiert" : "Kopieren nicht möglich")));
 
   $("#view").querySelectorAll(".entry[data-id]").forEach(row => {
@@ -994,6 +1101,156 @@ function renderFood() {
   });
   if (fDraft) drawEditor();
 }
+/* ---------- Barcode-Scanner (EAN-13, EAN-8, UPC-A) + Open Food Facts ---------- */
+const EAN_L = ["3211", "2221", "2122", "1411", "1132", "1231", "1114", "1312", "1213", "3112"].map(x => x.split("").map(Number));
+const EAN_G = EAN_L.map(a => [...a].reverse());
+const EAN_PARITY = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLG", "LGLGLG", "LGLGGL", "LGGLGL"];
+// Vergleicht 4 Balkenbreiten mit den Mustern. Die Summen benachbarter Breiten gleichen "verlaufene" Balken aus.
+function matchDigit(r, tables) {
+  const sum = r[0] + r[1] + r[2] + r[3], q = r.map(x => x / sum * 7); let best = null, bestErr = 1e9, second = 1e9;
+  for (const [tag, tab] of tables) tab.forEach((pat, d) => {
+    let e = 0;
+    for (let k = 0; k < 3; k++) e += Math.abs(q[k] + q[k + 1] - pat[k] - pat[k + 1]);
+    for (let k = 0; k < 4; k++) e += 0.35 * Math.abs(q[k] - pat[k]);
+    if (e < bestErr) { second = bestErr; bestErr = e; best = { d, tag }; } else if (e < second) second = e;
+  });
+  return bestErr < 1.8 ? best : null;
+}
+const guardOk = (r, unit) => r.every(x => x > unit * 0.35 && x < unit * 2);
+function eanCheck(dg) { const n = dg.length; let t = 0; for (let i = 0; i < n - 1; i++) t += dg[i] * ((n - 1 - i) % 2 ? 3 : 1); return (10 - t % 10) % 10 === dg[n - 1]; }
+function tryEAN(runs, isBar, i, side) {
+  const need = 3 + side * 4 + 5 + side * 4 + 3;
+  if (!isBar[i] || i + need > runs.length) return null;
+  let total = 0; for (let k = 0; k < need; k++) total += runs[i + k];
+  const unit = total / (side * 14 + 11);
+  if (i > 0 && runs[i - 1] < unit * 2) return null; // Ruhezone links
+  if (i + need < runs.length && runs[i + need] < unit * 2) return null; // Ruhezone rechts
+  if (!guardOk(runs.slice(i, i + 3), unit)) return null;
+  let p = i + 3; const left = [], par = [], right = [];
+  for (let d = 0; d < side; d++, p += 4) { const m = matchDigit(runs.slice(p, p + 4), side === 6 ? [["L", EAN_L], ["G", EAN_G]] : [["L", EAN_L]]); if (!m) return null; left.push(m.d); par.push(m.tag); }
+  if (!guardOk(runs.slice(p, p + 5), unit)) return null; p += 5;
+  for (let d = 0; d < side; d++, p += 4) { const m = matchDigit(runs.slice(p, p + 4), [["R", EAN_L]]); if (!m) return null; right.push(m.d); }
+  if (!guardOk(runs.slice(p, p + 3), unit)) return null;
+  let dg;
+  if (side === 6) { const f = EAN_PARITY.indexOf(par.join("")); if (f < 0) return null; dg = [f, ...left, ...right]; }
+  else dg = [...left, ...right];
+  return eanCheck(dg) ? dg.join("") : null;
+}
+function runsOf(g, thr) {
+  const runs = [], isBar = []; let cur = g[0] < thr(0), len = 0;
+  for (let i = 0; i < g.length; i++) { const b = g[i] < thr(i); if (b === cur) len++; else { runs.push(len); isBar.push(cur); cur = b; len = 1; } }
+  runs.push(len); isBar.push(cur); return [runs, isBar];
+}
+function scanLine(g0) {
+  const n = g0.length, g = new Float64Array(n);
+  for (let i = 0; i < n; i++) g[i] = (g0[Math.max(0, i - 1)] + 2 * g0[i] + g0[Math.min(n - 1, i + 1)]) / 4; // leicht glätten gegen Bildrauschen
+  let mn = 255, mx = 0;
+  for (let i = 0; i < n; i++) { if (g[i] < mn) mn = g[i]; if (g[i] > mx) mx = g[i]; }
+  if (mx - mn < 35) return null;
+  const pre = new Float64Array(n + 1); for (let i = 0; i < n; i++) pre[i + 1] = pre[i] + g[i];
+  const w = Math.max(12, Math.round(n / 10));
+  const thresholds = [() => (mn + mx) / 2, () => mn + (mx - mn) * .4, () => mn + (mx - mn) * .6, i => { const a = Math.max(0, i - w), b = Math.min(n, i + w); return pre[b] / (b - a) - pre[a] / (b - a); }];
+  for (const thr of thresholds) {
+    const [runs, isBar] = runsOf(g, thr);
+    for (let i = 0; i < runs.length; i++) { const r = tryEAN(runs, isBar, i, 6) || tryEAN(runs, isBar, i, 4); if (r) return r; }
+  }
+  return null;
+}
+// Sucht auf mehreren waagerechten Linien im mittleren Bildbereich (auch kopfüber)
+function decodeBarcode(img) {
+  const { width: W, height: H, data } = img, hits = {};
+  for (let k = 0; k <= 14; k++) {
+    const y = Math.round(H * (0.3 + 0.4 * k / 14)), g = new Float64Array(W);
+    for (let x = 0; x < W; x++) { const o = (y * W + x) * 4; g[x] = data[o] * .299 + data[o + 1] * .587 + data[o + 2] * .114; }
+    const r = scanLine(g) || scanLine(g.slice().reverse());
+    if (r) { hits[r] = (hits[r] || 0) + 1; if (hits[r] >= 2) return r; }
+  }
+  return null;
+}
+
+let scan = null;
+function openScanner() {
+  closeScanner();
+  const ov = document.createElement("div"); ov.className = "scanner"; ov.id = "scanner";
+  ov.innerHTML = `<div class="sc-top"><b>Barcode scannen</b><button class="icon-btn" id="scClose" aria-label="Schließen" style="color:#fff;font-size:22px">✕</button></div>
+    <div class="sc-cam"><video id="scVideo" playsinline muted autoplay></video><div class="sc-frame"></div></div>
+    <div class="sc-panel" id="scPanel">
+      <div class="small" id="scMsg" style="color:var(--text-2)">Halte den Barcode waagerecht in den Rahmen, mit etwas Abstand, damit er scharf ist.</div>
+      <form class="row" id="scForm" style="margin-top:10px"><input id="scCode" inputmode="numeric" placeholder="… oder Nummer unter dem Barcode eintippen" autocomplete="off"><button class="btn" type="submit">Suchen</button></form>
+    </div>`;
+  document.body.appendChild(ov); document.body.classList.add("scanning");
+  $("#scClose").addEventListener("click", closeScanner);
+  $("#scForm").addEventListener("submit", e => { e.preventDefault(); const c = $("#scCode").value.replace(/\D/g, ""); if (c.length >= 8) foundCode(c); else toast("Bitte die ganze Nummer eingeben (8 oder 13 Ziffern)"); });
+  scan = { stream: null, timer: null, canvas: document.createElement("canvas"), detector: null, busy: false, hits: {} };
+  if ("BarcodeDetector" in window) { try { scan.detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a"] }); } catch (e) {} }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFail(); return; }
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+    .then(st => {
+      if (!scan) { st.getTracks().forEach(t => t.stop()); return; }
+      scan.stream = st; const v = $("#scVideo"); v.srcObject = st; v.play().catch(() => {});
+      scan.timer = setInterval(scanFrame, 150);
+    }).catch(camFail);
+}
+function camFail() {
+  const c = $(".sc-cam"); if (c) c.remove();
+  const m = $("#scMsg"); if (m) m.textContent = "Die Kamera ist nicht verfügbar. Erlaube den Kamerazugriff in den Einstellungen oder tippe die Nummer unter dem Barcode ein.";
+  const i = $("#scCode"); if (i) i.focus();
+}
+async function scanFrame() {
+  const v = $("#scVideo"); if (!scan || scan.busy || !v || v.readyState < 2 || !v.videoWidth) return;
+  scan.busy = true;
+  try {
+    let code = null;
+    if (scan.detector) { const r = await scan.detector.detect(v).catch(() => []); if (r && r[0]) code = r[0].rawValue; }
+    if (!code) {
+      const W = Math.min(1280, v.videoWidth), H = Math.round(v.videoHeight / v.videoWidth * W), cv = scan.canvas; cv.width = W; cv.height = H;
+      const ctx = cv.getContext("2d", { willReadFrequently: true }); ctx.drawImage(v, 0, 0, W, H);
+      code = decodeBarcode(ctx.getImageData(0, 0, W, H));
+    }
+    if (code && scan) { scan.hits[code] = (scan.hits[code] || 0) + 1; if (scan.detector || scan.hits[code] >= 2) foundCode(code); }
+  } finally { if (scan) scan.busy = false; }
+}
+function stopCamera() { if (!scan) return; clearInterval(scan.timer); if (scan.stream) scan.stream.getTracks().forEach(t => t.stop()); scan.stream = null; }
+function closeScanner() { stopCamera(); scan = null; const o = $("#scanner"); if (o) o.remove(); document.body.classList.remove("scanning"); }
+async function foundCode(code) {
+  stopCamera(); if (navigator.vibrate) navigator.vibrate(80);
+  if (code.length === 12) code = "0" + code;
+  const cam = $(".sc-cam"); if (cam) cam.remove();
+  const panel = $("#scPanel"); if (!panel) return;
+  panel.innerHTML = `<div class="small muted">Barcode ${esc(code)}</div><div style="margin-top:8px">Suche in Open Food Facts …</div>`;
+  let prod = null, err = null;
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_de,brands,nutriments,serving_quantity,quantity`);
+    const j = await r.json(); if (j && j.status === 1 && j.product) prod = j.product;
+  } catch (e) { err = e; }
+  if (!$("#scPanel")) return;
+  if (!prod) {
+    panel.innerHTML = `<div class="small muted">Barcode ${esc(code)}</div>
+      <p>${err ? "Keine Verbindung zur Produktdatenbank. Bist du online?" : "Dieses Produkt ist nicht in der Datenbank."} Trag die Werte von der Verpackung ein.</p>
+      <div class="row"><button class="btn ghost grow" id="scAgain">Nochmal scannen</button><button class="btn grow" id="scManual">Manuell eintragen</button></div>`;
+    $("#scAgain").addEventListener("click", openScanner);
+    $("#scManual").addEventListener("click", () => { closeScanner(); fDraft = { name: "", kcal: 0, p: 0, c: 0, f: 0, meal: ($("#fMeal") || {}).value || mealNow() }; drawEditor(); });
+    return;
+  }
+  const n = prod.nutriments || {};
+  const per100 = { kcal: n["energy-kcal_100g"] != null ? +n["energy-kcal_100g"] : n["energy_100g"] != null ? n["energy_100g"] / 4.184 : null, p: n.proteins_100g, c: n.carbohydrates_100g, f: n.fat_100g };
+  const name = (prod.product_name_de || prod.product_name || `Produkt ${code}`).trim(), brand = String(prod.brands || "").split(",")[0].trim();
+  const missing = Object.values(per100).some(v => v == null || isNaN(v));
+  const amount0 = Math.round(+prod.serving_quantity) || 100;
+  panel.innerHTML = `<div class="small muted">Barcode ${esc(code)}</div>
+    <div style="font-size:18px;font-weight:650;margin-top:4px">${esc(name)}</div>${brand ? `<div class="small muted">${esc(brand)}</div>` : ""}
+    <div class="small muted" style="margin-top:8px">Pro 100 g: ${per100.kcal != null ? round(per100.kcal) : "?"} kcal · ${per100.p != null ? fmt(+per100.p) : "?"} g P · ${per100.c != null ? fmt(+per100.c) : "?"} g KH · ${per100.f != null ? fmt(+per100.f) : "?"} g F</div>
+    ${missing ? `<div class="small" style="color:var(--critical);margin-top:4px">Einige Werte fehlen in der Datenbank. Bitte prüfen.</div>` : ""}
+    <div class="row" style="margin-top:12px;align-items:flex-end"><div class="grow"><label class="f">Wie viel hast du gegessen? (g oder ml)</label><input id="scAmt" inputmode="decimal" value="${amount0}"></div></div>
+    <div class="ok-box" id="scCalc" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" id="scAgain">Neu scannen</button><button class="btn grow" id="scTake">Übernehmen</button></div>`;
+  const calc = () => { const a = Math.max(0, num($("#scAmt").value) || 0), k = a / 100; return { name: `${name} (${fmtKg(a)} g)`, kcal: round((per100.kcal || 0) * k), p: round((+per100.p || 0) * k), c: round((+per100.c || 0) * k), f: round((+per100.f || 0) * k) }; };
+  const show = () => { const v = calc(); $("#scCalc").innerHTML = `<b>${v.kcal} kcal</b> · ${v.p} g Protein · ${v.c} g KH · ${v.f} g Fett`; };
+  $("#scAmt").addEventListener("input", show); show();
+  $("#scAgain").addEventListener("click", openScanner);
+  $("#scTake").addEventListener("click", () => { const v = calc(); closeScanner(); fDraft = Object.assign(v, { meal: ($("#fMeal") || {}).value || mealNow() }); drawEditor(); });
+}
+
 function drawEditor() {
   const d = fDraft, w = $("#fEditWrap"); if (!w) return;
   w.innerHTML = `<form id="fEdit" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
@@ -1102,6 +1359,87 @@ function examRow(e, deletable) {
     <span class="tag" style="${n <= 3 ? "border-color:var(--accent);color:var(--text)" : ""}">${countdown(e.date)}</span>
     ${deletable ? `<button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
 }
+/* Stundenplan */
+const DAYS = ["Mo", "Di", "Mi", "Do", "Fr"], DAYS_LONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
+const weekdayIdx = d => (parse(d).getDay() + 6) % 7; // 0 = Montag
+let ttDay = null;
+const lessonsOn = di => db.timetable.filter(l => l.day === di).sort((a, b) => (a.start || "99").localeCompare(b.start || "99"));
+function lessonRow(l, del) {
+  return `<div class="entry dash-link lesson" data-sid="${l.subjectId}" data-l="${l.id}"><span class="small muted" style="width:94px;flex:none;font-variant-numeric:tabular-nums">${l.start ? `${l.start}${l.end ? "–" + l.end : ""}` : ""}</span>
+    <div class="grow"><b>${esc(subjName(l.subjectId))}</b>${l.room ? ` <span class="small muted">· ${esc(l.room)}</span>` : ""}</div>
+    ${del ? `<button class="icon-btn l-del" aria-label="Stunde löschen">✕</button>` : `<span class="muted">›</span>`}</div>`;
+}
+function bindLessons() {
+  $("#view").querySelectorAll(".lesson").forEach(el => el.addEventListener("click", e => {
+    e.stopPropagation();
+    if (e.target.closest(".l-del")) { if (confirm("Stunde löschen?")) { db.timetable = db.timetable.filter(x => x.id !== el.dataset.l); save(); render(); } return; }
+    if (db.subjects.some(x => x.id === el.dataset.sid)) openSubject(el.dataset.sid);
+  }));
+}
+
+/* Noten */
+const GRADE_TYPES = ["Klausur", "Test", "Mündlich", "Sonstiges"];
+const gSys = () => db.settings.gradeSystem === "punkte" ? "punkte" : "noten";
+function parseGrade(v) {
+  const t = String(v).trim().replace(",", ".");
+  if (gSys() === "punkte") return /^\d{1,2}$/.test(t) && +t <= 15 ? +t : null;
+  const m = t.match(/^([1-6])\s*([+-])?$/);
+  if (m) { const n = +m[1] + (m[2] === "+" ? -0.3 : m[2] === "-" ? 0.3 : 0); return n >= 0.7 && n <= 6 ? Math.round(n * 10) / 10 : null; }
+  const n = parseFloat(t); return !isNaN(n) && n >= 1 && n <= 6 && /^\d(\.\d{1,2})?$/.test(t) ? n : null;
+}
+const fmtGrade = n => n == null ? "–" : fmt(n, Number.isInteger(n) ? 0 : 1);
+const gradesOf = sid => db.grades.filter(g => g.subjectId === sid && (g.system || "noten") === gSys()).sort((a, b) => b.date.localeCompare(a.date));
+function gradeAvg(sid) {
+  const g = gradesOf(sid), w = g.reduce((t, x) => t + (x.weight || 1), 0);
+  return w ? g.reduce((t, x) => t + x.value * (x.weight || 1), 0) / w : null;
+}
+const fmtAvg = a => a == null ? "–" : fmt(a, gSys() === "punkte" ? 1 : 2);
+
+/* Lern-Timer (Pomodoro) */
+let audioCtx = null;
+function beep() {
+  try {
+    if (!audioCtx) return; const t = audioCtx.currentTime;
+    [0, .25, .5].forEach(d => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.frequency.value = 880;
+      g.gain.setValueAtTime(.0001, t + d); g.gain.exponentialRampToValueAtTime(.3, t + d + .02); g.gain.exponentialRampToValueAtTime(.0001, t + d + .2);
+      o.connect(g); g.connect(audioCtx.destination); o.start(t + d); o.stop(t + d + .22); });
+  } catch (e) {}
+}
+const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h ${pad(m % 60)} min` : `${m} min`;
+const focusMinutes = (from, to, sid) => db.focus.filter(f => f.date >= from && f.date <= to && (!sid || f.subjectId === sid)).reduce((t, f) => t + f.minutes, 0);
+function logFocus(sid, minutes) { if (minutes >= 1) db.focus.push({ id: uid(), date: today(), subjectId: sid, minutes }); }
+function logLearn(sid) {
+  const e = db.learnLog.find(x => x.date === today() && x.subjectId === sid);
+  if (e) e.n++; else db.learnLog.push({ id: uid(), date: today(), subjectId: sid, n: 1 });
+}
+function startFocus(sid) {
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.resume) audioCtx.resume(); } catch (e) {}
+  const fm = db.settings.focusMin || 25, bm = db.settings.breakMin || 5, now = Date.now();
+  db.focusActive = { subjectId: sid, phase: "focus", startedAt: now, endsAt: now + fm * 60000, focusMin: fm, breakMin: bm };
+  save(); tickFocus(); toast(`${fm} Minuten Fokus: ${subjName(sid)}`); if (tab === "school" || tab === "home") render();
+}
+function stopFocus() {
+  const fa = db.focusActive; if (!fa) return;
+  if (fa.phase === "focus") logFocus(fa.subjectId, Math.floor((Date.now() - fa.startedAt) / 60000));
+  db.focusActive = null; save(); tickFocus(); if (tab === "school" || tab === "home") render();
+}
+function tickFocus() {
+  const fa = db.focusActive, bar = $("#focusBar"); if (!bar) return;
+  document.body.classList.toggle("focusing", !!fa);
+  if (!fa) { bar.hidden = true; return; }
+  const now = Date.now();
+  if (fa.phase === "focus" && now >= fa.endsAt) {
+    logFocus(fa.subjectId, fa.focusMin); fa.phase = "break"; fa.startedAt = fa.endsAt; fa.endsAt += fa.breakMin * 60000; save(); beep();
+    if (!document.hidden) toast("Fokuszeit geschafft. Kurze Pause!");
+  }
+  if (fa.phase === "break" && now >= fa.endsAt) { fa.phase = "done"; save(); beep(); }
+  bar.hidden = false;
+  const left = Math.max(0, Math.ceil((fa.endsAt - now) / 1000));
+  bar.querySelector(".fb-l").textContent = `${subjName(fa.subjectId)} · ${fa.phase === "focus" ? "Fokus" : fa.phase === "break" ? "Pause" : "Pause vorbei"}`;
+  bar.querySelector(".fb-t").textContent = fa.phase === "done" ? "" : `${Math.floor(left / 60)}:${pad(left % 60)}`;
+  bar.querySelector(".fb-next").hidden = fa.phase !== "done";
+}
+
 function renderSchool() {
   if (schoolLearn) return renderLearn();
   if (schoolSub && db.subjects.some(s => s.id === schoolSub)) return renderSubject();
@@ -1119,12 +1457,53 @@ function renderSchool() {
           <span class="muted" style="font-size:20px">›</span></div>`;
       }).join("") : `<div class="empty">Noch keine Fächer. Leg unten dein erstes an.</div>`}
       <form class="row" id="subjForm" style="margin-top:12px"><input id="subjName" placeholder="Neues Fach, z. B. Mathe" autocomplete="off" required><button class="btn" type="submit">Anlegen</button></form>
-    </div>`;
+    </div>
+    ${db.subjects.length ? (() => {
+      if (ttDay == null) ttDay = Math.min(4, weekdayIdx(today()));
+      const ls = lessonsOn(ttDay);
+      return `<div class="card"><h2>Stundenplan</h2>
+        <div class="seg" id="ttSeg" style="display:flex;margin-bottom:8px">${DAYS.map((d, i) => `<button class="grow ${i === ttDay ? "on" : ""}" data-d="${i}">${d}</button>`).join("")}</div>
+        ${ls.length ? ls.map(l => lessonRow(l, true)).join("") : `<div class="empty">Für ${DAYS_LONG[ttDay]} ist noch nichts eingetragen.</div>`}
+        <form id="ttForm" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div class="row"><div class="grow"><label class="f">Fach</label><select id="ttSub">${db.subjects.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></div>
+            <div style="width:90px"><label class="f">Raum</label><input id="ttRoom" placeholder="optional" autocomplete="off"></div></div>
+          <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Von</label><input type="time" id="ttStart" value="${ls.length && ls[ls.length - 1].end ? ls[ls.length - 1].end : "08:00"}"></div>
+            <div class="grow"><label class="f">Bis</label><input type="time" id="ttEnd"></div></div>
+          <button class="btn" type="submit" style="width:100%;margin-top:10px">Stunde am ${DAYS_LONG[ttDay]} hinzufügen</button>
+        </form></div>`;
+    })() : ""}
+    ${db.subjects.length ? (() => {
+      const ws = weekStartIso(), tot = focusMinutes(ws, today()), per = db.subjects.map(x => [x, focusMinutes(ws, today(), x.id)]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
+      const mx = per.length ? per[0][1] : 1;
+      return `<div class="card"><h2>Lernzeit diese Woche</h2>
+        <div class="kcal-big" style="font-size:26px">${fmtMin(tot)}</div>
+        ${per.map(([x, m]) => `<div class="macro"><div class="row"><span class="grow">${esc(x.name)}</span><span>${fmtMin(m)}</span></div><div class="bar"><span style="width:${m / mx * 100}%"></span></div></div>`).join("")}
+        ${db.focusActive ? `<div class="small muted" style="margin-top:10px">Der Timer läuft gerade, oben siehst du die Restzeit.</div>`
+          : `<div class="row" style="margin-top:12px"><select id="fcSub" class="grow">${db.subjects.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select><button class="btn" id="fcStart">${db.settings.focusMin || 25} min starten</button></div>`}
+      </div>`;
+    })() : ""}
+    ${db.grades.some(g => (g.system || "noten") === gSys()) ? (() => {
+      const rows = db.subjects.map(x => [x, gradeAvg(x.id)]).filter(x => x[1] != null), all = rows.length ? rows.reduce((t, x) => t + x[1], 0) / rows.length : null;
+      return `<div class="card"><h2>Noten</h2>
+        <div class="row" style="margin-bottom:4px"><span class="grow muted small">Gesamtschnitt (Mittel der Fächer)</span><b style="font-size:22px">${fmtAvg(all)}</b></div>
+        ${rows.map(([x, a]) => `<div class="entry dash-link subj" data-id="${x.id}"><span class="grow">${esc(x.name)}</span><b>${fmtAvg(a)}</b><span class="muted">›</span></div>`).join("")}</div>`;
+    })() : ""}`;
   $("#subjForm").addEventListener("submit", e => {
     e.preventDefault(); const n = $("#subjName").value.trim(); if (!n) return;
     db.subjects.push({ id: uid(), name: n }); save(); render(); toast(`${n} angelegt`);
   });
   $("#view").querySelectorAll(".subj").forEach(el => el.addEventListener("click", () => openSubject(el.dataset.id)));
+  bindLessons();
+  const tts = $("#ttSeg"); if (tts) tts.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ttDay = +b.dataset.d; render(); } });
+  const ttf = $("#ttForm");
+  if (ttf) ttf.addEventListener("submit", e => {
+    e.preventDefault();
+    const start = $("#ttStart").value, end = $("#ttEnd").value;
+    if (start && end && end <= start) { toast("Das Ende muss nach dem Anfang liegen"); return; }
+    db.timetable.push({ id: uid(), day: ttDay, subjectId: $("#ttSub").value, start, end, room: $("#ttRoom").value.trim() });
+    save(); render(); toast("Stunde eingetragen");
+  });
+  const fcs = $("#fcStart"); if (fcs) fcs.addEventListener("click", () => startFocus($("#fcSub").value));
 }
 function openSubject(id) { schoolSub = id; kiAction = "summary"; kiFileId = ""; kiFileObj = null; kiText = ""; if (tab !== "school") tab = "school"; render(); window.scrollTo(0, 0); }
 
@@ -1155,6 +1534,26 @@ function renderSubject() {
         ${cards.length ? `<button class="btn small" id="learn">${due ? "Lernen" : "Alle üben"}</button>` : ""}</div>
       ${cards.length ? `<details style="margin-top:10px"><summary class="small muted">Alle Karten anzeigen</summary>${cards.map(c => `<div class="entry" data-card="${c.id}"><div class="grow"><div>${esc(c.q)}</div><div class="small muted">${esc(c.a)}</div></div><span class="tag">Stufe ${c.box}</span><button class="icon-btn c-del" aria-label="Löschen">✕</button></div>`).join("")}
         <button class="btn small ghost" id="cardsDel" style="margin-top:8px">Alle Karten löschen</button></details>` : ""}
+    </div>
+
+    <div class="card"><h2>Lern-Timer</h2>
+      <div class="row"><div class="grow"><b>${fmtMin(focusMinutes(weekStartIso(), today(), s.id))}</b> <span class="muted small">diese Woche gelernt</span></div>
+        ${db.focusActive ? `<span class="small muted">${db.focusActive.subjectId === s.id ? "Läuft gerade" : "Läuft in " + esc(subjName(db.focusActive.subjectId))}</span>`
+          : `<button class="btn small" id="focusGo">${db.settings.focusMin || 25} min Fokus</button>`}</div>
+    </div>
+
+    <div class="card"><h2>Noten</h2>
+      ${(() => { const gs = gradesOf(s.id); return gs.length ? `<div class="row" style="margin-bottom:4px"><span class="grow small muted">Durchschnitt (gewichtet)</span><b style="font-size:22px">${fmtAvg(gradeAvg(s.id))}</b></div>` +
+        gs.map(g => `<div class="entry" data-g="${g.id}"><div class="grow"><div>${esc(g.title || g.type)}</div><div class="small muted">${g.type} · ${short(g.date)}${(g.weight || 1) !== 1 ? ` · zählt ${fmt(g.weight, g.weight % 1 ? 1 : 0)}-fach` : ""}</div></div><b style="font-size:18px">${fmtGrade(g.value)}</b><button class="icon-btn g-del" aria-label="Löschen">✕</button></div>`).join("")
+        : `<div class="empty">Noch keine Noten eingetragen.</div>`; })()}
+      <form id="grForm" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <div class="row"><div class="grow"><label class="f">${gSys() === "punkte" ? "Punkte (0–15)" : "Note (z. B. 2, 2+ oder 2,3)"}</label><input id="grVal" inputmode="${gSys() === "punkte" ? "numeric" : "text"}" autocomplete="off" required></div>
+          <div class="grow"><label class="f">Art</label><select id="grType">${GRADE_TYPES.map(t => `<option>${t}</option>`).join("")}</select></div></div>
+        <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Zählt wie oft</label><input id="grW" inputmode="decimal" value="2"></div>
+          <div class="grow"><label class="f">Datum</label><input type="date" id="grDate" value="${today()}" max="${today()}"></div></div>
+        <input id="grTitle" placeholder="Optional: Titel, z. B. 2. Klausur" autocomplete="off" style="margin-top:10px">
+        <button class="btn" type="submit" style="width:100%;margin-top:10px">Note eintragen</button>
+      </form>
     </div>
 
     <div class="card"><h2>Termine</h2>
@@ -1226,6 +1625,18 @@ function renderSubject() {
   });
   $("#kiAns").addEventListener("input", e => { kiText = e.target.value; drawKiOut(); });
   const lb = $("#learn"); if (lb) lb.addEventListener("click", () => startLearn(s.id));
+  const fg = $("#focusGo"); if (fg) fg.addEventListener("click", () => startFocus(s.id));
+  $("#grType").addEventListener("change", e => { $("#grW").value = e.target.value === "Klausur" ? 2 : 1; });
+  $("#grForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = parseGrade($("#grVal").value), w = num($("#grW").value);
+    if (v == null) { toast(gSys() === "punkte" ? "Bitte Punkte von 0 bis 15 eingeben" : "Bitte eine Note von 1 bis 6 eingeben"); return; }
+    db.grades.push({ id: uid(), subjectId: s.id, value: v, system: gSys(), type: $("#grType").value, weight: w && w > 0 ? w : 1, date: $("#grDate").value || today(), title: $("#grTitle").value.trim() });
+    save(); render(); toast("Note eingetragen");
+  });
+  $("#view").querySelectorAll("[data-g] .g-del").forEach(b => b.addEventListener("click", () => {
+    const id = b.closest("[data-g]").dataset.g; if (confirm("Note löschen?")) { db.grades = db.grades.filter(g => g.id !== id); save(); render(); }
+  }));
   const cdAll = $("#cardsDel"); if (cdAll) cdAll.addEventListener("click", () => { if (confirm("Alle Karteikarten dieses Fachs löschen?")) { db.cards = db.cards.filter(c => c.subjectId !== s.id); save(); render(); } });
   $("#view").querySelectorAll("[data-card] .c-del").forEach(b => b.addEventListener("click", () => { const id = b.closest("[data-card]").dataset.card; db.cards = db.cards.filter(c => c.id !== id); save(); render(); }));
   $("#view").querySelectorAll("[data-exam] .ex-del").forEach(b => b.addEventListener("click", () => {
@@ -1343,8 +1754,8 @@ function renderLearn() {
   const flip = () => { if (!learnFlip) { learnFlip = true; render(); } };
   $("#flash").addEventListener("click", flip); const fb = $("#flip"); if (fb) fb.addEventListener("click", flip);
   const next = () => { learnFlip = false; learnIdx++; save(); render(); };
-  const ok = $("#ok"); if (ok) ok.addEventListener("click", () => { c.box = Math.min(5, c.box + 1); c.due = addDays(today(), BOX_DAYS[c.box]); learnStats.ok++; next(); });
-  const ag = $("#again"); if (ag) ag.addEventListener("click", () => { c.box = 1; c.due = today(); learnQueue.push(c.id); learnStats.again++; next(); });
+  const ok = $("#ok"); if (ok) ok.addEventListener("click", () => { logLearn(s.id); c.box = Math.min(5, c.box + 1); c.due = addDays(today(), BOX_DAYS[c.box]); learnStats.ok++; next(); });
+  const ag = $("#again"); if (ag) ag.addEventListener("click", () => { logLearn(s.id); c.box = 1; c.due = today(); learnQueue.push(c.id); learnStats.again++; next(); });
 }
 
 /* ---------- Gym ---------- */
@@ -1595,7 +2006,92 @@ function tickRest() {
   else bar.hidden = true;
   const el = $("#elapsed"); if (el && db.activeWorkout) el.textContent = `${minsSince(db.activeWorkout.start)} min`;
 }
-setInterval(tickRest, 1000);
+setInterval(() => { tickRest(); tickFocus(); }, 1000);
+$("#focusBar .fb-stop").addEventListener("click", stopFocus);
+$("#focusBar .fb-next").addEventListener("click", () => { const fa = db.focusActive; if (fa) startFocus(fa.subjectId); });
+
+/* ---------- Wochenrückblick ---------- */
+let weekOff = 0, weekKiText = "";
+function weekData(mon) {
+  const sun = addDays(mon, 6), inW = d => d >= mon && d <= sun;
+  const ws = db.workouts.filter(w => inW(w.date));
+  const mealDays = [...new Set(db.meals.filter(m => inW(m.date)).map(m => m.date))];
+  const tot = mealDays.map(dayTotals);
+  const avg = k => tot.length ? tot.reduce((t, x) => t + x[k], 0) / tot.length : null;
+  const pGoal = db.settings.proteinGoal, kGoal = db.settings.kcalGoal;
+  const wl = weightsSorted(), wEnd = wl.filter(e => e.date <= sun).slice(-1)[0], wPrevEnd = wl.filter(e => e.date <= addDays(sun, -7)).slice(-1)[0];
+  const aEnd = wEnd && wEnd.date >= mon ? avg7(wl, wEnd.date) : null, aPrev = wPrevEnd ? avg7(wl, wPrevEnd.date) : null;
+  const sl = db.sleep.filter(e => inW(e.date)).map(e => ({ d: e.date, h: sleepHours(e), q: e.quality }));
+  const focus = db.subjects.map(x => [x.name, focusMinutes(mon, sun, x.id)]).filter(x => x[1]);
+  return {
+    mon, sun,
+    workouts: ws.length, sets: ws.reduce((t, w) => t + w.entries.reduce((u, e) => u + e.sets.length, 0), 0), volume: ws.reduce((t, w) => t + volume(w), 0), plans: ws.map(w => w.planName || "Training"),
+    mealDays: mealDays.length, kcal: avg("kcal"), protein: avg("p"),
+    proteinHit: pGoal ? tot.filter(x => x.p >= pGoal * 0.95).length : null, kcalHit: kGoal ? tot.filter(x => Math.abs(x.kcal - kGoal) <= kGoal * 0.1).length : null,
+    weightAvg: aEnd, weightChange: aEnd != null && aPrev != null ? aEnd - aPrev : null,
+    sleepN: sl.length, sleepAvg: sl.length ? sl.reduce((t, x) => t + x.h, 0) / sl.length : null,
+    sleepMin: sl.length ? sl.reduce((a, b) => a.h < b.h ? a : b) : null, sleepMax: sl.length ? sl.reduce((a, b) => a.h > b.h ? a : b) : null,
+    focusTotal: focusMinutes(mon, sun), focus,
+    cards: db.learnLog.filter(x => inW(x.date)).reduce((t, x) => t + x.n, 0),
+    grades: db.grades.filter(g => inW(g.date)).map(g => `${subjName(g.subjectId)} ${fmtGrade(g.value)} (${g.type})`),
+    todosDone: db.todos.filter(t => t.done && t.doneAt && inW(t.doneAt)).length, todosOpenLate: db.todos.filter(t => !t.done && t.due && t.due <= sun).length,
+    nextExams: db.exams.filter(e => e.date > sun && e.date <= addDays(sun, 14)).sort((a, b) => a.date.localeCompare(b.date)).map(e => `${e.title} (${subjName(e.subjectId)}, ${short(e.date)})`),
+  };
+}
+function weekPrompt(w) {
+  const L = [`Hier ist mein Wochenrückblick vom ${short(w.mon)} bis ${short(w.sun)}. Ich bin Schüler${db.settings.grade ? ` (${db.settings.grade})` : ""} und achte auf Schule, Training und Ernährung.`];
+  L.push(`Training: ${w.workouts} Einheiten${w.workouts ? ` (${w.plans.join(", ")}), ${w.sets} Sätze, ${fmt(w.volume / 1000)} t Volumen` : ""}.`);
+  L.push(w.mealDays ? `Ernährung: an ${w.mealDays} Tagen getrackt, Ø ${round(w.kcal)} kcal und ${round(w.protein)} g Protein pro Tag${db.settings.kcalGoal ? ` (Ziel ${db.settings.kcalGoal} kcal)` : ""}${db.settings.proteinGoal ? ` (Proteinziel ${db.settings.proteinGoal} g, an ${w.proteinHit} Tagen erreicht)` : ""}.` : "Ernährung: nicht getrackt.");
+  if (w.weightAvg != null) L.push(`Gewicht: Ø ${fmt(w.weightAvg)} kg${w.weightChange != null ? `, ${w.weightChange > 0 ? "+" : ""}${fmt(w.weightChange)} kg zur Vorwoche` : ""}${db.settings.goalWeight ? `, Ziel ${fmt(db.settings.goalWeight)} kg` : ""}.`);
+  L.push(w.sleepN ? `Schlaf: Ø ${fmt(w.sleepAvg)} h in ${w.sleepN} Nächten (kürzeste ${fmt(w.sleepMin.h)} h, längste ${fmt(w.sleepMax.h)} h), Ziel ${db.settings.sleepGoal} h.` : "Schlaf: nicht eingetragen.");
+  L.push(`Schule: ${fmtMin(w.focusTotal)} konzentriert gelernt${w.focus.length ? ` (${w.focus.map(([n, m]) => `${n} ${m} min`).join(", ")})` : ""}, ${w.cards} Karteikarten wiederholt.${w.grades.length ? ` Neue Noten: ${w.grades.join(", ")}.` : ""}${w.nextExams.length ? ` Anstehend: ${w.nextExams.join("; ")}.` : ""}`);
+  L.push(`Todos: ${w.todosDone} erledigt, ${w.todosOpenLate} noch offen und fällig.`);
+  L.push("", "Bitte antworte kurz auf Deutsch in Stichpunkten:", "1. Was lief diese Woche gut (3 Punkte)?", "2. Wo kann ich mich verbessern (3 Punkte, konkret)?", "3. Ein einfacher Plan für nächste Woche: Prioritäten für Schule, Training, Ernährung und Schlaf.");
+  return L.join("\n");
+}
+function statRow(label, value, sub) { return `<div class="entry"><span class="grow">${label}</span><span style="text-align:right"><b>${value}</b>${sub ? `<div class="small muted">${sub}</div>` : ""}</span></div>`; }
+function renderWeek() {
+  const mon = addDays(weekStartIso(), -7 * weekOff), w = weekData(mon), app = AI_APPS[db.settings.aiApp] || AI_APPS.chatgpt;
+  const note = db.weekNotes.find(n => n.week === mon);
+  $("#view").innerHTML = `
+    <div class="datebar"><button class="icon-btn" id="wkPrev" aria-label="Vorherige Woche" style="font-size:24px">‹</button>
+      <div style="text-align:center"><b>${weekOff === 0 ? "Diese Woche" : weekOff === 1 ? "Letzte Woche" : "Woche"}</b><div class="small muted">${short(w.mon)} – ${short(w.sun)}</div></div>
+      <button class="icon-btn" id="wkNext" aria-label="Nächste Woche" style="font-size:24px;${weekOff === 0 ? "opacity:.3" : ""}" ${weekOff === 0 ? "disabled" : ""}>›</button></div>
+    <div class="card"><h2>Training</h2>
+      ${statRow("Einheiten", w.workouts, w.workouts ? esc(w.plans.join(", ")) : "")}
+      ${w.workouts ? statRow("Sätze", w.sets) + statRow("Volumen", `${fmt(w.volume / 1000)} t`) : ""}</div>
+    <div class="card"><h2>Ernährung</h2>
+      ${w.mealDays ? statRow("Ø Kalorien", `${round(w.kcal).toLocaleString("de-DE")} kcal`, db.settings.kcalGoal ? `Ziel ${db.settings.kcalGoal.toLocaleString("de-DE")}, an ${w.kcalHit} von ${w.mealDays} Tagen getroffen` : "") +
+        statRow("Ø Protein", `${round(w.protein)} g`, db.settings.proteinGoal ? `Ziel an ${w.proteinHit} von ${w.mealDays} Tagen erreicht` : "") + statRow("Getrackte Tage", `${w.mealDays} von 7`)
+        : `<div class="empty">Diese Woche nichts eingetragen.</div>`}</div>
+    <div class="card"><h2>Körper</h2>
+      ${statRow("Gewicht Ø 7 Tage", w.weightAvg != null ? `${fmt(w.weightAvg)} kg` : "–", w.weightChange != null ? `${w.weightChange > 0 ? "+" : ""}${fmt(w.weightChange)} kg zur Vorwoche` : "")}
+      ${statRow("Schlaf Ø", w.sleepAvg != null ? hm(w.sleepAvg) : "–", w.sleepN ? `${w.sleepN} Nächte · kürzeste ${WD[parse(w.sleepMin.d).getDay()]} ${hm(w.sleepMin.h)}` : "")}</div>
+    <div class="card"><h2>Schule</h2>
+      ${statRow("Lernzeit", fmtMin(w.focusTotal), w.focus.map(([n, m]) => `${esc(n)} ${m} min`).join(" · "))}
+      ${statRow("Karteikarten wiederholt", w.cards)}
+      ${w.grades.length ? statRow("Neue Noten", w.grades.length, esc(w.grades.join(" · "))) : ""}
+      ${statRow("Todos erledigt", w.todosDone, w.todosOpenLate ? `${w.todosOpenLate} noch offen und fällig` : "")}
+      ${w.nextExams.length ? `<div class="small muted" style="margin-top:8px">Danach stehen an: ${esc(w.nextExams.join(" · "))}</div>` : ""}</div>
+    <div class="card"><h2>KI-Auswertung</h2>
+      ${note ? `<div class="md">${md(note.text)}</div><button class="btn small ghost" id="wkDel" style="margin-top:8px">Auswertung löschen</button>` : `
+      <div class="step" style="margin-top:0"><span class="n">1</span><div class="grow"><button class="btn" id="wkAsk" style="width:100%;white-space:normal">Woche kopieren${app.url ? ` & ${app.name} öffnen` : ""}</button></div></div>
+      <div class="step"><span class="n">2</span><div class="grow"><button class="btn ghost" id="wkPaste" style="width:100%">Antwort einfügen</button>
+        <textarea id="wkAns" placeholder="… oder die Antwort hier hineinkopieren" style="margin-top:8px">${esc(weekKiText)}</textarea>
+        <button class="btn" id="wkSave" style="width:100%;margin-top:8px" ${weekKiText.trim() ? "" : "hidden"}>Auswertung speichern</button></div></div>`}
+    </div>`;
+  $("#wkPrev").addEventListener("click", () => { weekOff++; weekKiText = ""; render(); });
+  $("#wkNext").addEventListener("click", () => { if (weekOff > 0) { weekOff--; weekKiText = ""; render(); } });
+  const del = $("#wkDel"); if (del) del.addEventListener("click", () => { if (confirm("Auswertung löschen?")) { db.weekNotes = db.weekNotes.filter(n => n.week !== mon); save(); render(); } });
+  const ask = $("#wkAsk");
+  if (ask) {
+    ask.addEventListener("click", () => { copyText(weekPrompt(w)).then(ok => toast(ok ? "Wochendaten kopiert" : "Kopieren nicht möglich")); if (app.url) window.open(app.url, "_blank"); });
+    const upd = () => { $("#wkSave").hidden = !weekKiText.trim(); };
+    $("#wkPaste").addEventListener("click", async () => { try { weekKiText = await navigator.clipboard.readText(); $("#wkAns").value = weekKiText; upd(); } catch (e) { $("#wkAns").focus(); toast("Lange in das Feld tippen → Einsetzen"); } });
+    $("#wkAns").addEventListener("input", e => { weekKiText = e.target.value; upd(); });
+    $("#wkSave").addEventListener("click", () => { db.weekNotes = db.weekNotes.filter(n => n.week !== mon); db.weekNotes.push({ id: uid(), week: mon, text: weekKiText, created: today() }); weekKiText = ""; save(); render(); toast("Auswertung gespeichert"); });
+  }
+}
 
 /* ---------- Mehr ---------- */
 function renderMore() {
@@ -1607,6 +2103,22 @@ function renderMore() {
         <div class="row" style="margin-top:12px"><button class="btn ghost grow" id="syncNow">Synchronisieren</button><button class="btn ghost grow" id="logout">Abmelden</button></div>`
       : cloudOn ? "" : `<div class="small muted">Noch kein Konto eingerichtet. Deine Daten liegen nur auf diesem Gerät. Für Anmeldung und Sync trägst du deine Supabase-Daten in <b>config.js</b> ein.</div>`}
     </div>
+    ${loggedIn() ? `<div class="card"><h2>Schlaf-Automatik</h2>
+      <div class="small muted">Trägt deinen Schlaf jeden Morgen automatisch aus Apple Health ein, über die Kurzbefehle-App. Das lohnt sich, wenn du eine Apple Watch trägst oder dein iPhone deinen Schlaf aufzeichnet. Eigene Einträge werden nie überschrieben.</div>
+      ${s.shortcutToken ? `
+        ${[["Adresse", SB_URL + "/rest/v1/rpc/push_sleep"], ["apikey", SB_KEY], ["Token", s.shortcutToken]].map(([k, v]) => `<div class="entry"><div class="grow" style="min-width:0"><div class="small muted">${k}</div><div class="small" style="word-break:break-all">${esc(v)}</div></div><button class="btn small ghost sc-copy" data-v="${esc(v)}">Kopieren</button></div>`).join("")}
+        <details style="margin-top:10px"><summary><b>So richtest du den Kurzbefehl ein</b></summary><div class="md"><ol>
+          <li>Öffne die App <b>Kurzbefehle</b> → <b>+</b> → nenne ihn „Tagwerk Schlaf“.</li>
+          <li>Aktion <b>Health-Beispiele suchen</b>: Typ <b>Schlafanalyse</b>, Filter <b>Startdatum ist in den letzten 1 Tag</b>, sortiert nach <b>Startdatum</b>, <b>Älteste zuerst</b>, Limit <b>1</b>.</li>
+          <li>Aktion <b>Details von Health-Beispielen abrufen</b> → <b>Startdatum</b>. Dann <b>Datum formatieren</b> → <b>ISO 8601</b> (mit Uhrzeit). Dann <b>Variable festlegen</b> → Name „Start“.</li>
+          <li>Nochmal <b>Health-Beispiele suchen</b>: Schlafanalyse, letzte 1 Tag, sortiert nach <b>Enddatum</b>, <b>Neueste zuerst</b>, Limit 1. Dann <b>Enddatum</b> abrufen, als <b>ISO 8601</b> formatieren und als Variable „Ende“ festlegen.</li>
+          <li>Aktion <b>Inhalte von URL abrufen</b>: URL = <b>Adresse</b> von oben. Methode <b>POST</b>. Header: <b>apikey</b> = Wert von oben. Anfragetext <b>JSON</b> mit drei Textfeldern: <b>p_token</b> = Token, <b>p_start</b> = Variable Start, <b>p_end</b> = Variable Ende.</li>
+          <li>Einmal antippen zum Testen. Wenn „ok“ zurückkommt, steht der Schlaf beim nächsten Öffnen von Tagwerk drin.</li>
+          <li>Tab <b>Automation</b> → <b>+</b> → <b>Tageszeit</b>, z. B. 10:00, täglich → <b>Sofort ausführen</b> → Kurzbefehl „Tagwerk Schlaf“ wählen.</li>
+        </ol><p>Die Namen der Aktionen können je nach iOS-Version leicht abweichen.</p></div></details>
+        <button class="btn small ghost" id="scToken" style="margin-top:10px">Neuen Token erzeugen</button>`
+      : `<button class="btn ghost" id="scToken" style="width:100%;margin-top:10px">Einrichten</button>`}
+    </div>` : ""}
     <form class="card" id="setForm"><h2>Ziele</h2>
       <div class="row">
         <div class="grow"><label class="f">Zielgewicht (kg)</label><input id="gW" inputmode="decimal" placeholder="optional" value="${s.goalWeight ? fmt(s.goalWeight) : ""}"></div>
@@ -1626,6 +2138,10 @@ function renderMore() {
     <div class="card"><h2>Schule</h2>
       <label class="f">Klasse und Schulart (hilft der KI, passend zu erklären)</label>
       <input id="grade" placeholder="z. B. Klasse 11, Gymnasium" value="${esc(s.grade || "")}">
+      <label class="f" style="margin-top:10px">Notensystem</label>
+      <select id="gradeSys"><option value="noten" ${s.gradeSystem !== "punkte" ? "selected" : ""}>Noten 1–6</option><option value="punkte" ${s.gradeSystem === "punkte" ? "selected" : ""}>Punkte 0–15 (Oberstufe)</option></select>
+      <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Lern-Timer: Fokus (min)</label><input id="fMin" inputmode="numeric" value="${s.focusMin || 25}"></div>
+        <div class="grow"><label class="f">Pause (min)</label><input id="bMin" inputmode="numeric" value="${s.breakMin || 5}"></div></div>
     </div>
     <div class="card"><h2>KI-App</h2>
       <label class="f">Welche KI-App soll der KI-Knopf öffnen?</label>
@@ -1643,6 +2159,13 @@ function renderMore() {
       <p class="small muted" style="margin-bottom:0">Schuldateien sind nicht in dieser Backup-Datei${loggedIn() ? ", sie liegen aber in deinem Konto" : ""}.</p>
     </div>
     `;
+  $("#view").querySelectorAll(".sc-copy").forEach(b => b.addEventListener("click", () => copyText(b.dataset.v).then(ok => toast(ok ? "Kopiert" : "Kopieren nicht möglich"))));
+  const sct = $("#scToken");
+  if (sct) sct.addEventListener("click", async () => {
+    if (s.shortcutToken && !confirm("Neuen Token erzeugen? Der alte funktioniert dann nicht mehr, du musst ihn im Kurzbefehl ersetzen.")) return;
+    sct.disabled = true;
+    try { await setupShortcutToken(); render(); toast("Token erstellt"); } catch (e) { toast(e.message); sct.disabled = false; }
+  });
   const sn = $("#syncNow"); if (sn) sn.addEventListener("click", () => sync().then(() => toast(syncState === "ok" ? "Synchronisiert" : "Sync gerade nicht möglich")));
   const lo = $("#logout"); if (lo) lo.addEventListener("click", logout);
   $("#setForm").addEventListener("submit", e => {
@@ -1655,6 +2178,9 @@ function renderMore() {
     save(); toast("Ziele gespeichert");
   });
   $("#grade").addEventListener("change", e => { s.grade = e.target.value.trim(); save(); toast("Gespeichert"); });
+  $("#gradeSys").addEventListener("change", e => { s.gradeSystem = e.target.value; save(); toast("Gespeichert"); });
+  $("#fMin").addEventListener("change", e => { const v = Math.round(num(e.target.value)); s.focusMin = v >= 1 && v <= 180 ? v : 25; e.target.value = s.focusMin; save(); toast("Gespeichert"); });
+  $("#bMin").addEventListener("change", e => { const v = Math.round(num(e.target.value)); s.breakMin = v >= 1 && v <= 60 ? v : 5; e.target.value = s.breakMin; save(); toast("Gespeichert"); });
   $("#aiApp").addEventListener("change", e => { s.aiApp = e.target.value; save(); toast("Gespeichert"); });
   $("#exp").addEventListener("click", async () => {
     const name = `tagwerk-backup-${today()}.json`;
@@ -1683,6 +2209,7 @@ function renderMore() {
 let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 render();
+if (pendingHashLogin && !session) loginFromLink(pendingHashLogin);
 if (loggedIn()) sync();
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
