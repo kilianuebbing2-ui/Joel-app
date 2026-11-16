@@ -111,7 +111,7 @@
     border-top: 1px solid var(--border); display: flex; justify-content: space-around;
     padding: 6px 4px calc(6px + var(--safe-b)); z-index: 10;
   }
-  nav.tabs button { background: none; border: 0; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; padding: 4px 6px; min-width: 60px; cursor: pointer; }
+  nav.tabs button { background: none; border: 0; color: var(--text-3); display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; padding: 4px 6px; min-width: 52px; cursor: pointer; }
   nav.tabs button svg { width: 24px; height: 24px; }
   nav.tabs button.on { color: var(--accent); }
 
@@ -136,6 +136,16 @@
   .fav:first-of-type { border-top: 0; }
   .datebar { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 14px; }
   .datebar b { font-size: 20px; }
+  .md { margin-top: 8px; font-size: 14px; color: var(--text-2); }
+  .md p { margin: 6px 0; } .md ul, .md ol { margin: 6px 0; padding-left: 20px; } .md li { margin: 3px 0; }
+  .md-h { font-weight: 650; color: var(--text); margin: 12px 0 4px; } .md b { color: var(--text); }
+  .md code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+  details.note { border-top: 1px solid var(--border); padding: 10px 0; } details.note:first-of-type { border-top: 0; }
+  details > summary { cursor: pointer; list-style: none; display: flex; gap: 10px; align-items: center; }
+  details > summary::-webkit-details-marker { display: none; }
+  .flash { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 22px 18px; min-height: 300px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; }
+  .flash .fq { font-size: 21px; font-weight: 600; line-height: 1.35; }
+  .flash .fa { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 17px; }
   .ok-box { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
 </style>
 </head>
@@ -146,6 +156,7 @@
 <nav class="tabs" id="tabs">
   <button data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>Übersicht</button>
   <button data-tab="todos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6.5" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="5" cy="17.5" r="1.6"/><path d="M10 6.5h10M10 12h10M10 17.5h10"/></svg>Todos</button>
+  <button data-tab="school"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5"/><path d="M22 9v6"/></svg>Schule</button>
   <button data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3v8M4.5 3v5a2.5 2.5 0 0 0 5 0V3M7 11v10"/><path d="M17 21V3c-2.2 1.2-3.5 3.6-3.5 7v3H17"/></svg>Essen</button>
   <button data-tab="body"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M15 7h5v5"/></svg>Körper</button>
   <button data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>Mehr</button>
@@ -155,8 +166,8 @@
 "use strict";
 /* ---------- Speicher ---------- */
 const KEY = "tagwerk_v1";
-const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [],
-  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt" } });
+const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [],
+  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "" } });
 let db = load();
 function load() {
   try {
@@ -227,11 +238,11 @@ let tab = "home", lastBody = "weight";
 document.getElementById("tabs").addEventListener("click", e => {
   const b = e.target.closest("button[data-tab]"); if (b) go(b.dataset.tab === "body" ? lastBody : b.dataset.tab);
 });
-function go(t) { if (t === "food" && tab !== "food") { fDate = null; fLastSaved = null; } tab = t; if (t === "weight" || t === "sleep") lastBody = t; render(); window.scrollTo(0, 0); }
+function go(t) { if (t === "food" && tab !== "food") { fDate = null; fLastSaved = null; } if (t === "school" && tab !== "school") schoolLearn = null; tab = t; if (t === "weight" || t === "sleep") lastBody = t; render(); window.scrollTo(0, 0); }
 function render() {
   const navKey = tab === "weight" || tab === "sleep" ? "body" : tab;
   document.querySelectorAll("nav.tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === navKey));
-  ({ home: renderHome, todos: renderTodos, food: renderFood, weight: renderWeight, sleep: renderSleep, more: renderMore })[tab]();
+  ({ home: renderHome, todos: renderTodos, food: renderFood, school: renderSchool, weight: renderWeight, sleep: renderSleep, more: renderMore })[tab]();
 }
 function bodyHeader(active) {
   return `<div class="row" style="margin:8px 0 18px"><div class="seg grow" id="bodySeg" style="display:flex">
@@ -260,6 +271,11 @@ function renderHome() {
       <div class="row"><h2 class="grow">Heute zu erledigen</h2><button class="btn small ghost" data-go="todos">Alle</button></div>
       ${open.length ? open.map(todoRow).join("") : `<div class="empty">Nichts fällig. ${upcoming ? `${upcoming} Aufgabe${upcoming > 1 ? "n" : ""} demnächst.` : ""}</div>`}
     </div>
+
+    ${(() => { const ex = upcomingExams(14), dc = dueCards().length; if (!ex.length && !dc) return "";
+      return `<div class="card dash-link" data-go="school"><h2>Schule</h2>
+        ${ex.slice(0, 3).map(e => examRow(e)).join("")}
+        ${dc ? `<div class="small" style="margin-top:${ex.length ? 8 : 0}px"><span style="color:var(--accent)">${dc} Karteikarte${dc > 1 ? "n" : ""}</span> heute fällig</div>` : ""}</div>`; })()}
 
     <div class="card dash-link" data-go="food">
       <h2>Ernährung heute</h2>
@@ -291,7 +307,7 @@ function renderHome() {
 
     <div class="card">
       <h2>Kommt bald</h2>
-      <div class="small muted">Schule mit Datei-KI (Phase 3), Gym-Tracking (Phase 4).</div>
+      <div class="small muted">Gym-Tracking mit Trainingsplänen und Kraftkurven (Phase 4).</div>
     </div>`;
   bindTodoEvents();
   $("#view").querySelectorAll("[data-go]").forEach(el => el.addEventListener("click", e => {
@@ -767,6 +783,327 @@ function drawEditor() {
   w.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
+/* ---------- Schule ---------- */
+// Dateien liegen in IndexedDB (mehr Platz als localStorage)
+const fileDB = (() => {
+  let p;
+  const open = () => p || (p = new Promise((res, rej) => {
+    const r = indexedDB.open("tagwerk-files", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("files");
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const tx = (mode, fn) => open().then(d => new Promise((res, rej) => {
+    const t = d.transaction("files", mode), r = fn(t.objectStore("files"));
+    t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  }));
+  return { put: (id, v) => tx("readwrite", s => s.put(v, id)), get: id => tx("readonly", s => s.get(id)), del: id => tx("readwrite", s => s.delete(id)) };
+})();
+const EXAM_TYPES = ["Klausur", "Test", "Abgabe", "Referat"];
+const BOX_DAYS = [0, 0, 1, 3, 7, 14]; // Stufe → Tage bis zur nächsten Wiederholung
+const ACTIONS = [["summary", "Zusammenfassen"], ["explain", "Erklären"], ["cards", "Karteikarten erstellen"], ["quiz", "Übungsaufgaben"], ["ask", "Frage stellen"]];
+const subjName = id => (db.subjects.find(s => s.id === id) || {}).name || "Fach";
+const fmtSize = b => b < 1048576 ? Math.max(1, Math.round(b / 1024)) + " KB" : fmt(b / 1048576) + " MB";
+const fileKind = n => { const e = n.split(".").pop().toLowerCase(); return ({ pdf: "PDF", doc: "Word", docx: "Word", ppt: "PowerPoint", pptx: "PowerPoint", jpg: "Bild", jpeg: "Bild", png: "Bild", heic: "Bild", txt: "Text" })[e] || e.toUpperCase(); };
+const dueCards = sid => db.cards.filter(c => (!sid || c.subjectId === sid) && c.due <= today());
+const countdown = d => { const n = dayDiff(today(), d); return n === 0 ? "heute" : n === 1 ? "morgen" : n < 0 ? "vorbei" : `in ${n} Tagen`; };
+const upcomingExams = days => db.exams.filter(e => e.date >= today() && (!days || e.date <= addDays(today(), days))).sort((a, b) => a.date.localeCompare(b.date));
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+// Kleine Markdown-Darstellung für KI-Antworten
+function md(text) {
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  let out = "", list = null;
+  const close = () => { if (list) { out += `</${list}>`; list = null; } };
+  for (const l of esc(text).split("\n")) {
+    let m;
+    if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { close(); }
+    else if ((m = l.match(/^\s*#{1,6}\s+(.*)/))) { close(); out += `<div class="md-h">${inline(m[1])}</div>`; }
+    else if ((m = l.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { close(); out += "<ul>"; list = "ul"; } out += `<li>${inline(m[1])}</li>`; }
+    else if ((m = l.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { close(); out += "<ol>"; list = "ol"; } out += `<li>${inline(m[1])}</li>`; }
+    else if (!l.trim()) close();
+    else { close(); out += `<p>${inline(l)}</p>`; }
+  }
+  close(); return out;
+}
+// Liest Karteikarten im Format "F: … | A: …" (auch über zwei Zeilen verteilt)
+function parseCards(text) {
+  const lines = String(text || "").replace(/\*\*/g, "").split("\n").map(l => l.trim()).filter(Boolean), cards = [];
+  const pre = "^(?:[-*•]\\s*)?(?:\\d+[.)]\\s*)?";
+  for (let i = 0; i < lines.length; i++) {
+    let m = lines[i].match(new RegExp(pre + "(?:F|Frage)\\s*[:：]\\s*(.+?)\\s*\\|\\s*(?:A|Antwort)\\s*[:：]\\s*(.+)$", "i"));
+    if (m) { cards.push({ q: m[1], a: m[2] }); continue; }
+    m = lines[i].match(new RegExp(pre + "(?:F|Frage)\\s*[:：]\\s*(.+)$", "i"));
+    const n = lines[i + 1] && lines[i + 1].match(/^(?:[-*•]\s*)?(?:A|Antwort)\s*[:：]\s*(.+)$/i);
+    if (m && n) { cards.push({ q: m[1], a: n[1] }); i++; }
+  }
+  return cards;
+}
+function schoolPrompt(action, subj, focus, hasFile, question) {
+  const g = db.settings.grade ? ` Ich bin in ${db.settings.grade}.` : "";
+  const src = hasFile ? "der angehängten Datei" : "dem Material, das ich anhänge";
+  const f = focus ? `\nBesonders wichtig: ${focus}` : "";
+  return ({
+    summary: `Fasse den Inhalt ${src} für mich zusammen. Fach: ${subj}.${g}${f}\nGliedere so:\n1. Worum es geht (2–3 Sätze)\n2. Kernaussagen als Stichpunkte\n3. Wichtige Begriffe mit kurzer Erklärung\n4. Was ich für eine Klausur können muss\nSchreib auf Deutsch, klar und knapp.`,
+    explain: `Erkläre mir den Inhalt ${src} so, dass ich ihn wirklich verstehe. Fach: ${subj}.${g}${f}\nFang mit dem großen Zusammenhang an, erkläre dann Schritt für Schritt und nutze mindestens ein Beispiel. Stell am Ende 3 kurze Kontrollfragen und schreib die Lösungen darunter.`,
+    cards: `Erstelle aus ${src} 15 bis 25 Karteikarten zum Lernen. Fach: ${subj}.${g}${f}\nSchreib jede Karte in genau diesem Format, eine Karte pro Zeile:\nF: <Frage> | A: <Antwort>\nDie Antworten sind kurz (höchstens 2 Sätze). Schreib keinen Text vor oder nach den Karten.`,
+    quiz: `Erstelle aus ${src} 8 Übungsaufgaben wie in einer Klausur, von leicht bis schwer. Fach: ${subj}.${g}${f}\nSchreib zuerst alle Aufgaben. Danach unter der Überschrift „Lösungen“ kurze, nachvollziehbare Lösungen.`,
+    ask: `Ich habe eine Frage zum Fach ${subj}.${g}${hasFile ? " Die angehängte Datei ist mein Unterrichtsmaterial, bitte beziehe dich darauf." : ""}\n\n${question || ""}\n\nErkläre es mir verständlich und mit einem Beispiel.`,
+  })[action];
+}
+
+let schoolSub = null, schoolLearn = null, kiAction = "summary", kiFileId = "", kiFileObj = null, kiText = "";
+let learnQueue = [], learnIdx = 0, learnFlip = false, learnStats = { ok: 0, again: 0 };
+
+function examRow(e, deletable) {
+  const n = dayDiff(today(), e.date);
+  return `<div class="entry" data-exam="${e.id}"><div class="grow"><div>${esc(e.title)}</div>
+    <div class="small muted">${esc(subjName(e.subjectId))} · ${e.type} · ${WD[parse(e.date).getDay()]}, ${short(e.date)}</div></div>
+    <span class="tag" style="${n <= 3 ? "border-color:var(--accent);color:var(--text)" : ""}">${countdown(e.date)}</span>
+    ${deletable ? `<button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
+}
+function renderSchool() {
+  if (schoolLearn) return renderLearn();
+  if (schoolSub && db.subjects.some(s => s.id === schoolSub)) return renderSubject();
+  schoolSub = null;
+  const ex = upcomingExams(), due = dueCards().length;
+  $("#view").innerHTML = `
+    <h1>Schule</h1><p class="sub">${due ? `${due} Karteikarte${due > 1 ? "n" : ""} heute fällig` : "Fächer, Dateien, Karteikarten und Termine"}</p>
+    <div class="card"><h2>Nächste Termine</h2>${ex.length ? ex.slice(0, 6).map(e => examRow(e)).join("") : `<div class="empty">Keine Termine. Du legst sie im jeweiligen Fach an.</div>`}</div>
+    <div class="card"><h2>Fächer</h2>
+      ${db.subjects.length ? db.subjects.map(s => {
+        const nf = db.files.filter(f => f.subjectId === s.id).length, nc = db.cards.filter(c => c.subjectId === s.id).length, nd = dueCards(s.id).length;
+        const ne = upcomingExams().find(e => e.subjectId === s.id);
+        return `<div class="entry dash-link subj" data-id="${s.id}"><div class="grow"><div><b>${esc(s.name)}</b></div>
+          <div class="small muted">${nf} Datei${nf === 1 ? "" : "en"} · ${nc} Karten${nd ? ` · <span style="color:var(--accent)">${nd} fällig</span>` : ""}${ne ? ` · ${ne.type} ${countdown(ne.date)}` : ""}</div></div>
+          <span class="muted" style="font-size:20px">›</span></div>`;
+      }).join("") : `<div class="empty">Noch keine Fächer. Leg unten dein erstes an.</div>`}
+      <form class="row" id="subjForm" style="margin-top:12px"><input id="subjName" placeholder="Neues Fach, z. B. Mathe" autocomplete="off" required><button class="btn" type="submit">Anlegen</button></form>
+    </div>`;
+  $("#subjForm").addEventListener("submit", e => {
+    e.preventDefault(); const n = $("#subjName").value.trim(); if (!n) return;
+    db.subjects.push({ id: uid(), name: n }); save(); render(); toast(`${n} angelegt`);
+  });
+  $("#view").querySelectorAll(".subj").forEach(el => el.addEventListener("click", () => openSubject(el.dataset.id)));
+}
+function openSubject(id) { schoolSub = id; kiAction = "summary"; kiFileId = ""; kiFileObj = null; kiText = ""; if (tab !== "school") tab = "school"; render(); window.scrollTo(0, 0); }
+
+function renderSubject() {
+  const s = db.subjects.find(x => x.id === schoolSub);
+  const files = db.files.filter(f => f.subjectId === s.id).sort((a, b) => b.added.localeCompare(a.added));
+  const exams = db.exams.filter(e => e.subjectId === s.id).sort((a, b) => a.date.localeCompare(b.date));
+  const futureEx = exams.filter(e => e.date >= today()), pastN = exams.length - futureEx.length;
+  const cards = db.cards.filter(c => c.subjectId === s.id), due = dueCards(s.id).length;
+  const notes = db.notes.filter(n => n.subjectId === s.id).sort((a, b) => b.created.localeCompare(a.created));
+  const app = AI_APPS[db.settings.aiApp] || AI_APPS.chatgpt;
+  $("#view").innerHTML = `
+    <div class="datebar"><button class="icon-btn" id="back" aria-label="Zurück" style="font-size:24px">‹</button><b>${esc(s.name)}</b><button class="icon-btn" id="subjDel" aria-label="Fach löschen" title="Fach löschen">⋯</button></div>
+
+    <div class="card" id="kiCard"><h2>KI-Helfer</h2>
+      <label class="f">Was soll die KI tun?</label>
+      <select id="kiAction">${ACTIONS.map(([k, l]) => `<option value="${k}" ${k === kiAction ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <div style="margin-top:10px"><label class="f">Datei</label><select id="kiFile"><option value="">Keine, ich hänge sie in der KI-App an</option>${files.map(f => `<option value="${f.id}" ${f.id === kiFileId ? "selected" : ""}>${esc(f.name)}</option>`).join("")}</select></div>
+      <div style="margin-top:10px" id="kiQWrap" ${kiAction === "ask" ? "" : "hidden"}><label class="f">Deine Frage</label><textarea id="kiQ" placeholder="z. B. Wie funktioniert die Kettenregel?"></textarea></div>
+      <div style="margin-top:10px" id="kiFocusWrap" ${kiAction === "ask" ? "hidden" : ""}><label class="f">Optional: Worauf soll die KI achten?</label><input id="kiFocus" placeholder="z. B. nur Kapitel 3, mit Formeln" autocomplete="off"></div>
+      <div class="step"><span class="n">1</span><div class="grow"><button class="btn" id="kiAsk" style="width:100%;white-space:normal">Anfrage kopieren</button><div class="small muted" id="kiHint" style="margin-top:6px"></div></div></div>
+      <div class="step"><span class="n">2</span><div class="grow"><button class="btn ghost" id="kiPaste" style="width:100%">Antwort einfügen</button><textarea id="kiAns" placeholder="… oder die Antwort hier hineinkopieren" style="margin-top:8px">${esc(kiText)}</textarea></div></div>
+      <div id="kiOut"></div>
+    </div>
+
+    <div class="card"><h2>Karteikarten</h2>
+      <div class="row"><div class="grow">${cards.length ? `<b>${cards.length}</b> Karten · ${due ? `<span style="color:var(--accent)">${due} heute fällig</span>` : `<span class="muted">nichts fällig</span>`}` : `<span class="muted">Noch keine Karten. Lass sie oben von der KI erstellen.</span>`}</div>
+        ${cards.length ? `<button class="btn small" id="learn">${due ? "Lernen" : "Alle üben"}</button>` : ""}</div>
+      ${cards.length ? `<details style="margin-top:10px"><summary class="small muted">Alle Karten anzeigen</summary>${cards.map(c => `<div class="entry" data-card="${c.id}"><div class="grow"><div>${esc(c.q)}</div><div class="small muted">${esc(c.a)}</div></div><span class="tag">Stufe ${c.box}</span><button class="icon-btn c-del" aria-label="Löschen">✕</button></div>`).join("")}
+        <button class="btn small ghost" id="cardsDel" style="margin-top:8px">Alle Karten löschen</button></details>` : ""}
+    </div>
+
+    <div class="card"><h2>Termine</h2>
+      ${futureEx.length ? futureEx.map(e => examRow(e, true)).join("") : `<div class="empty">Keine anstehenden Termine.</div>`}
+      ${pastN ? `<div class="small muted">${pastN} vergangene${pastN > 1 ? "" : "r"} Termin${pastN > 1 ? "e" : ""}</div>` : ""}
+      <form id="exForm" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+        <input id="exTitle" placeholder="z. B. Klausur Analysis" autocomplete="off" required>
+        <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Datum</label><input type="date" id="exDate" required min="${today()}"></div>
+          <div class="grow"><label class="f">Art</label><select id="exType">${EXAM_TYPES.map(t => `<option>${t}</option>`).join("")}</select></div></div>
+        <label class="row small" style="margin-top:10px;gap:8px;color:var(--text-2)"><input type="checkbox" id="exTodos" checked style="width:20px;height:20px;flex:none;-webkit-appearance:checkbox;appearance:auto"> Lern-Todos anlegen (5, 3 und 1 Tag vorher)</label>
+        <button class="btn" type="submit" style="width:100%;margin-top:10px">Termin hinzufügen</button>
+      </form>
+    </div>
+
+    <div class="card"><h2>Dateien</h2>
+      ${files.length ? files.map(f => `<div class="entry" data-file="${f.id}"><div class="grow f-open dash-link"><div style="word-break:break-word">${esc(f.name)}</div><div class="small muted">${fileKind(f.name)} · ${fmtSize(f.size)} · ${short(f.added)}</div></div>
+        <button class="btn small ghost f-ki">KI</button><button class="icon-btn f-del" aria-label="Löschen">✕</button></div>`).join("") : `<div class="empty">Lade Arbeitsblätter, Skripte, Präsentationen oder Fotos von Tafelbildern hoch.</div>`}
+      <button class="btn ghost" id="upBtn" style="width:100%;margin-top:10px">Datei hinzufügen</button>
+      <input type="file" id="upInput" multiple hidden accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,image/*">
+    </div>
+
+    <div class="card"><h2>Notizen</h2>
+      ${notes.length ? notes.map(n => `<details class="note" data-note="${n.id}"><summary><span class="grow">${esc(n.title)}</span><span class="small muted">${short(n.created)}</span></summary>
+        <div class="md">${md(n.text)}</div><div class="row" style="margin-top:8px"><button class="btn small ghost n-copy">Kopieren</button><button class="btn small ghost n-del">Löschen</button></div></details>`).join("")
+        : `<div class="empty">Zusammenfassungen, Erklärungen und Übungsaufgaben der KI landen hier.</div>`}
+    </div>`;
+
+  const shareOk = () => !!(kiFileObj && navigator.canShare && navigator.canShare({ files: [kiFileObj] }));
+  const updateKi = () => {
+    $("#kiQWrap").hidden = kiAction !== "ask"; $("#kiFocusWrap").hidden = kiAction === "ask";
+    const btn = $("#kiAsk"), hint = $("#kiHint");
+    if (kiFileId && !kiFileObj) { btn.disabled = true; btn.textContent = "Datei wird geladen …"; return; }
+    btn.disabled = false;
+    if (shareOk()) {
+      btn.textContent = "Anfrage kopieren & Datei teilen";
+      hint.textContent = `Im Teilen-Menü ${app.url ? app.name : "deine KI-App"} wählen. Dort die Anfrage einfügen und senden. Dann die Antwort kopieren.`;
+    } else {
+      btn.textContent = `Anfrage kopieren${app.url ? ` & ${app.name} öffnen` : ""}`;
+      hint.textContent = kiFileId
+        ? "Teilen wird hier nicht unterstützt. Häng die Datei in der KI-App über die Büroklammer an, füge die Anfrage ein und sende sie."
+        : "In der KI-App: Anfrage einfügen, Datei oder Foto anhängen, senden. Dann die Antwort kopieren.";
+    }
+  };
+  const loadKiFile = id => {
+    kiFileId = id; kiFileObj = null; updateKi(); if (!id) return;
+    fileDB.get(id).then(r => { if (kiFileId === id && r) { kiFileObj = new File([r.buf], r.name, { type: r.type || "application/octet-stream" }); updateKi(); } })
+      .catch(() => { toast("Datei konnte nicht geladen werden"); kiFileId = ""; updateKi(); });
+  };
+  $("#back").addEventListener("click", () => { schoolSub = null; render(); window.scrollTo(0, 0); });
+  $("#subjDel").addEventListener("click", () => {
+    if (!confirm(`„${s.name}“ mit allen Dateien, Karten, Notizen und Terminen löschen?`)) return;
+    db.files.filter(f => f.subjectId === s.id).forEach(f => fileDB.del(f.id).catch(() => {}));
+    ["files", "cards", "notes", "exams"].forEach(k => db[k] = db[k].filter(x => x.subjectId !== s.id));
+    db.subjects = db.subjects.filter(x => x.id !== s.id); schoolSub = null; save(); render(); toast("Fach gelöscht");
+  });
+  $("#kiAction").addEventListener("change", e => { kiAction = e.target.value; updateKi(); drawKiOut(); });
+  $("#kiFile").addEventListener("change", e => loadKiFile(e.target.value));
+  $("#kiAsk").addEventListener("click", () => {
+    const q = $("#kiQ").value.trim();
+    if (kiAction === "ask" && !q) { toast("Schreib zuerst deine Frage"); $("#kiQ").focus(); return; }
+    const prompt = schoolPrompt(kiAction, s.name, $("#kiFocus").value.trim(), !!kiFileId, q);
+    copyText(prompt).then(ok => toast(ok ? "Anfrage kopiert" : "Kopieren nicht möglich"));
+    if (shareOk()) navigator.share({ files: [kiFileObj] }).catch(() => {});
+    else if (app.url) window.open(app.url, "_blank");
+  });
+  $("#kiPaste").addEventListener("click", async () => {
+    try { const t = await navigator.clipboard.readText(); $("#kiAns").value = t; kiText = t; drawKiOut(); }
+    catch (e) { $("#kiAns").focus(); toast("Lange in das Feld tippen → Einsetzen"); }
+  });
+  $("#kiAns").addEventListener("input", e => { kiText = e.target.value; drawKiOut(); });
+  const lb = $("#learn"); if (lb) lb.addEventListener("click", () => startLearn(s.id));
+  const cdAll = $("#cardsDel"); if (cdAll) cdAll.addEventListener("click", () => { if (confirm("Alle Karteikarten dieses Fachs löschen?")) { db.cards = db.cards.filter(c => c.subjectId !== s.id); save(); render(); } });
+  $("#view").querySelectorAll("[data-card] .c-del").forEach(b => b.addEventListener("click", () => { const id = b.closest("[data-card]").dataset.card; db.cards = db.cards.filter(c => c.id !== id); save(); render(); }));
+  $("#view").querySelectorAll("[data-exam] .ex-del").forEach(b => b.addEventListener("click", () => {
+    const id = b.closest("[data-exam]").dataset.exam; if (confirm("Termin löschen?")) { db.exams = db.exams.filter(x => x.id !== id); save(); render(); }
+  }));
+  $("#exForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const title = $("#exTitle").value.trim(), date = $("#exDate").value, type = $("#exType").value;
+    if (!title || !date) return;
+    db.exams.push({ id: uid(), subjectId: s.id, title, date, type });
+    let n = 0;
+    if ($("#exTodos").checked) [5, 3, 1].forEach(d => { const due = addDays(date, -d); if (due >= today()) { db.todos.push({ id: uid(), text: `Lernen: ${title} (${s.name})`, due, cat: "Schule", done: false, created: today() }); n++; } });
+    save(); render(); toast(n ? `Termin + ${n} Lern-Todos angelegt` : "Termin angelegt");
+  });
+  $("#upBtn").addEventListener("click", () => $("#upInput").click());
+  $("#upInput").addEventListener("change", async e => {
+    const list = [...e.target.files]; let ok = 0;
+    for (const f of list) {
+      if (f.size > 50 * 1048576) { toast(`${f.name} ist größer als 50 MB`); continue; }
+      try {
+        const id = uid(); await fileDB.put(id, { buf: await f.arrayBuffer(), type: f.type, name: f.name });
+        db.files.push({ id, subjectId: s.id, name: f.name, type: f.type, size: f.size, added: today() }); ok++;
+      } catch (err) { toast("Speichern fehlgeschlagen. Ist der Speicher voll?"); }
+    }
+    save(); render(); if (ok) toast(ok === 1 ? "Datei gespeichert" : `${ok} Dateien gespeichert`);
+  });
+  $("#view").querySelectorAll("[data-file]").forEach(row => {
+    const f = db.files.find(x => x.id === row.dataset.file);
+    row.querySelector(".f-open").addEventListener("click", () => {
+      const w = window.open("", "_blank");
+      fileDB.get(f.id).then(r => {
+        const url = URL.createObjectURL(new Blob([r.buf], { type: r.type || "application/octet-stream" }));
+        if (w) w.location.href = url; else location.href = url;
+      }).catch(() => { if (w) w.close(); toast("Datei konnte nicht geöffnet werden"); });
+    });
+    row.querySelector(".f-ki").addEventListener("click", () => { $("#kiFile").value = f.id; loadKiFile(f.id); $("#kiCard").scrollIntoView({ behavior: "smooth" }); });
+    row.querySelector(".f-del").addEventListener("click", () => {
+      if (!confirm(`„${f.name}“ löschen?`)) return;
+      fileDB.del(f.id).catch(() => {}); db.files = db.files.filter(x => x.id !== f.id);
+      if (kiFileId === f.id) { kiFileId = ""; kiFileObj = null; }
+      save(); render();
+    });
+  });
+  $("#view").querySelectorAll("[data-note]").forEach(el => {
+    const n = db.notes.find(x => x.id === el.dataset.note);
+    el.querySelector(".n-copy").addEventListener("click", () => copyText(n.text).then(ok => toast(ok ? "Kopiert" : "Kopieren nicht möglich")));
+    el.querySelector(".n-del").addEventListener("click", () => { if (confirm("Notiz löschen?")) { db.notes = db.notes.filter(x => x.id !== n.id); save(); render(); } });
+  });
+  if (kiFileId && !kiFileObj) loadKiFile(kiFileId); else updateKi();
+  drawKiOut();
+}
+function drawKiOut() {
+  const out = $("#kiOut"); if (!out) return;
+  const text = kiText.trim();
+  if (!text) { out.innerHTML = ""; return; }
+  const file = db.files.find(f => f.id === kiFileId);
+  const label = (ACTIONS.find(a => a[0] === kiAction) || [, "Notiz"])[1].replace(" erstellen", "");
+  const box = `margin-top:14px;padding-top:14px;border-top:1px solid var(--border)`;
+  const noteForm = `<label class="f">Titel</label><input id="noteTitle" value="${esc(label + (file ? ": " + file.name.replace(/\.[^.]+$/, "") : ""))}">
+    <button class="btn" id="noteSave" style="width:100%;margin-top:10px">Als Notiz speichern</button>`;
+  if (kiAction === "cards") {
+    const cards = parseCards(text);
+    out.innerHTML = cards.length
+      ? `<div style="${box}"><h2>${cards.length} Karteikarten erkannt</h2>
+          ${cards.slice(0, 3).map(c => `<div class="entry"><div class="grow"><div>${esc(c.q)}</div><div class="small muted">${esc(c.a)}</div></div></div>`).join("")}
+          ${cards.length > 3 ? `<div class="small muted">… und ${cards.length - 3} weitere</div>` : ""}
+          <button class="btn" id="cardsSave" style="width:100%;margin-top:10px">Karten speichern</button></div>`
+      : `<div style="${box}"><div class="small" style="color:var(--critical)">Keine Karten erkannt. Die KI sollte jede Karte als „F: … | A: …“ schreiben.</div><div style="margin-top:10px">${noteForm}</div></div>`;
+    const cs = $("#cardsSave");
+    if (cs) cs.addEventListener("click", () => {
+      const have = new Set(db.cards.filter(c => c.subjectId === schoolSub).map(c => c.q.toLowerCase()));
+      let n = 0;
+      cards.forEach(c => { if (!have.has(c.q.toLowerCase())) { db.cards.push({ id: uid(), subjectId: schoolSub, q: c.q, a: c.a, box: 1, due: today() }); have.add(c.q.toLowerCase()); n++; } });
+      kiText = ""; save(); render(); toast(n ? `${n} Karten gespeichert` : "Alle Karten gab es schon");
+    });
+  } else out.innerHTML = `<div style="${box}">${noteForm}</div>`;
+  const ns = $("#noteSave");
+  if (ns) ns.addEventListener("click", () => {
+    db.notes.push({ id: uid(), subjectId: schoolSub, fileId: kiFileId || null, kind: kiAction, title: $("#noteTitle").value.trim() || label, text: kiText, created: today() });
+    kiText = ""; save(); render(); toast("Notiz gespeichert");
+  });
+}
+
+/* Lernmodus mit Karteikasten-Prinzip: gewusst → Stufe hoch, später wieder; nicht gewusst → Stufe 1, gleich nochmal */
+function startLearn(sid) {
+  const due = dueCards(sid), pool = due.length ? due : db.cards.filter(c => c.subjectId === sid);
+  learnQueue = shuffle(pool.map(c => c.id)); learnIdx = 0; learnFlip = false; learnStats = { ok: 0, again: 0 };
+  schoolLearn = sid; render(); window.scrollTo(0, 0);
+}
+function renderLearn() {
+  const s = db.subjects.find(x => x.id === schoolLearn);
+  if (!s) { schoolLearn = null; return render(); }
+  const exit = () => { schoolLearn = null; render(); window.scrollTo(0, 0); };
+  if (learnIdx >= learnQueue.length) {
+    const nextDue = db.cards.filter(c => c.subjectId === s.id && c.due > today()).map(c => c.due).sort()[0];
+    $("#view").innerHTML = `<div class="datebar"><button class="icon-btn" id="back" style="font-size:24px">‹</button><b>${esc(s.name)}</b><span style="width:36px"></span></div>
+      <div class="card" style="text-align:center;padding:32px 16px"><div style="font-size:40px">✓</div><h1 style="font-size:24px">Geschafft</h1>
+        <p class="sub">${learnStats.ok} gewusst · ${learnStats.again} wiederholt</p>
+        ${nextDue ? `<p class="small muted">Nächste Wiederholung: ${relDay(nextDue)}</p>` : ""}
+        <button class="btn" id="done" style="width:100%">Zurück zum Fach</button></div>`;
+    $("#back").addEventListener("click", exit); $("#done").addEventListener("click", exit); return;
+  }
+  const c = db.cards.find(x => x.id === learnQueue[learnIdx]);
+  if (!c) { learnIdx++; return renderLearn(); }
+  $("#view").innerHTML = `
+    <div class="datebar"><button class="icon-btn" id="back" aria-label="Beenden" style="font-size:24px">‹</button><b>${esc(s.name)}</b><span class="small muted">${learnIdx + 1}/${learnQueue.length}</span></div>
+    <div class="bar" style="margin:-4px 0 16px"><span style="width:${learnIdx / learnQueue.length * 100}%"></span></div>
+    <div class="flash" id="flash"><div class="small muted">Frage</div><div class="fq">${esc(c.q)}</div>
+      ${learnFlip ? `<div class="fa"><div class="small muted">Antwort</div><div>${esc(c.a)}</div></div>` : `<div class="small muted" style="margin-top:auto">Tippen, um die Antwort zu sehen</div>`}</div>
+    ${learnFlip ? `<div class="row" style="margin-top:14px"><button class="btn ghost grow" id="again">Nochmal</button><button class="btn grow" id="ok">Gewusst</button></div>`
+      : `<button class="btn" id="flip" style="width:100%;margin-top:14px">Antwort zeigen</button>`}`;
+  $("#back").addEventListener("click", exit);
+  const flip = () => { if (!learnFlip) { learnFlip = true; render(); } };
+  $("#flash").addEventListener("click", flip); const fb = $("#flip"); if (fb) fb.addEventListener("click", flip);
+  const next = () => { learnFlip = false; learnIdx++; save(); render(); };
+  const ok = $("#ok"); if (ok) ok.addEventListener("click", () => { c.box = Math.min(5, c.box + 1); c.due = addDays(today(), BOX_DAYS[c.box]); learnStats.ok++; next(); });
+  const ag = $("#again"); if (ag) ag.addEventListener("click", () => { c.box = 1; c.due = today(); learnQueue.push(c.id); learnStats.again++; next(); });
+}
+
 /* ---------- Mehr ---------- */
 function renderMore() {
   const s = db.settings;
@@ -787,6 +1124,10 @@ function renderMore() {
       </div>
       <div class="row" style="margin-top:12px"><button class="btn grow" type="submit">Ziele speichern</button></div>
     </form>
+    <div class="card"><h2>Schule</h2>
+      <label class="f">Klasse und Schulart (hilft der KI, passend zu erklären)</label>
+      <input id="grade" placeholder="z. B. Klasse 11, Gymnasium" value="${esc(s.grade || "")}">
+    </div>
     <div class="card"><h2>KI-App</h2>
       <label class="f">Welche KI-App soll der KI-Knopf öffnen?</label>
       <select id="aiApp">${Object.entries(AI_APPS).map(([k, a]) => `<option value="${k}" ${s.aiApp === k ? "selected" : ""}>${a.name === "nur kopieren" ? "Keine öffnen, nur kopieren" : a.name}</option>`).join("")}</select>
@@ -799,10 +1140,10 @@ function renderMore() {
         <button class="btn ghost grow" id="impBtn">Backup laden</button>
         <input type="file" id="imp" accept="application/json,.json" hidden>
       </div>
-      <p class="small muted" style="margin-bottom:0">${db.todos.length} Todos · ${db.weights.length} Gewichtseinträge · ${db.sleep.length} Schlafeinträge · ${db.meals.length} Mahlzeiten · ${db.favorites.length} Favoriten</p>
+      <p class="small muted" style="margin-bottom:0">${db.todos.length} Todos · ${db.weights.length} Gewichtseinträge · ${db.sleep.length} Schlafeinträge · ${db.meals.length} Mahlzeiten · ${db.favorites.length} Favoriten · ${db.cards.length} Karteikarten · ${db.notes.length} Notizen</p>
+      <p class="small muted" style="margin-bottom:0">Hochgeladene Schuldateien sind nicht im Backup. Die Originale hast du ja in der Dateien-App.</p>
     </div>
     <div class="card"><h2>Kommt bald</h2>
-      <div class="soon"><span class="pill">Phase 3</span><div><b>Schule</b><div class="small muted">Fächer, Dateien, KI-Knöpfe zum Zusammenfassen und Erklären, Karteikarten, Klausuren.</div></div></div>
       <div class="soon"><span class="pill">Phase 4</span><div><b>Gym</b><div class="small muted">Trainingspläne, Sätze und Gewichte, Kraftkurven, Bestleistungen.</div></div></div>
     </div>`;
   $("#setForm").addEventListener("submit", e => {
@@ -814,6 +1155,7 @@ function renderMore() {
     s.kcalGoal = pos("#gK"); s.proteinGoal = pos("#gP"); s.carbGoal = pos("#gC"); s.fatGoal = pos("#gF");
     save(); toast("Ziele gespeichert");
   });
+  $("#grade").addEventListener("change", e => { s.grade = e.target.value.trim(); save(); toast("Gespeichert"); });
   $("#aiApp").addEventListener("change", e => { s.aiApp = e.target.value; save(); toast("Gespeichert"); });
   $("#exp").addEventListener("click", async () => {
     const name = `tagwerk-backup-${today()}.json`;

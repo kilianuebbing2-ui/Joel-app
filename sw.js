@@ -1,6 +1,6 @@
 // Offline-Speicher: Die App funktioniert auch ohne Internet.
 // Bei jedem Update die Versionsnummer erhöhen.
-const CACHE = "tagwerk-v2";
+const CACHE = "tagwerk-v3";
 const FILES = ["./", "index.html", "manifest.json", "icon-180.png", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
