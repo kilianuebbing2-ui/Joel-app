@@ -1658,9 +1658,11 @@ function examRow(e, deletable) {
 const DAYS = ["Mo", "Di", "Mi", "Do", "Fr"], DAYS_LONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
 const weekdayIdx = d => (parse(d).getDay() + 6) % 7; // 0 = Montag
 let ttDay = null;
-const lessonsOn = di => db.timetable.filter(l => l.day === di).sort((a, b) => (a.start || "99").localeCompare(b.start || "99"));
+const lessonKey = l => l.start || (l.pFrom ? "P" + pad(l.pFrom) : "Z");
+const lessonsOn = di => db.timetable.filter(l => l.day === di).sort((a, b) => lessonKey(a).localeCompare(lessonKey(b)));
+const lessonTime = l => l.start ? `${l.start}${l.end ? "–" + l.end : ""}` : l.pFrom ? `${l.pFrom}.${l.pTo && l.pTo !== l.pFrom ? "–" + l.pTo + "." : ""} Std.` : "";
 function lessonRow(l, del) {
-  return `<div class="entry dash-link lesson" data-sid="${l.subjectId}" data-l="${l.id}"><span class="small muted" style="width:94px;flex:none;font-variant-numeric:tabular-nums">${l.start ? `${l.start}${l.end ? "–" + l.end : ""}` : ""}</span>
+  return `<div class="entry dash-link lesson" data-sid="${l.subjectId}" data-l="${l.id}"><span class="small muted" style="width:94px;flex:none;font-variant-numeric:tabular-nums">${lessonTime(l)}</span>
     <div class="grow"><b>${esc(subjName(l.subjectId))}</b>${l.room ? ` <span class="small muted">· ${esc(l.room)}</span>` : ""}</div>
     ${del ? `<button class="icon-btn l-del" aria-label="Stunde löschen">✕</button>` : `<span class="muted">›</span>`}</div>`;
 }
@@ -1735,6 +1737,106 @@ function tickFocus() {
   bar.querySelector(".fb-next").hidden = fa.phase !== "done";
 }
 
+/* Stundenplan aus einem Screenshot (über die KI-App) */
+let ttImp = null; // { file, text }
+const DAY_MAP = { mo: 0, montag: 0, di: 1, dienstag: 1, mi: 2, mittwoch: 2, do: 3, donnerstag: 3, fr: 4, freitag: 4 };
+function ttPrompt() {
+  const names = db.subjects.map(x => x.name);
+  return [
+    "Auf dem angehängten Screenshot ist mein Stundenplan. Lies ihn bitte vollständig aus.",
+    names.length ? `Meine Fächer heißen: ${names.join(", ")}. Verwende genau diese Namen, wenn ein Fach dazu passt, auch bei Abkürzungen (z. B. „M“ für Mathe). Andere Fächer schreibst du ausgeschrieben.` : "Schreib die Fächer ausgeschrieben, nicht abgekürzt (z. B. Mathe statt M).",
+    "Schreib jede Unterrichtsstunde in genau eine Zeile in diesem Format:",
+    "STUNDE: Tag | Beginn | Ende | Fach | Raum",
+    "- Tag: Mo, Di, Mi, Do oder Fr",
+    "- Beginn und Ende als Uhrzeit, z. B. 08:00. Wenn keine Uhrzeiten zu sehen sind, schreib stattdessen die Nummer der Stunde, z. B. 1 und 2.",
+    "- Fasse direkt aufeinanderfolgende Stunden im gleichen Fach zu einer Zeile zusammen (Doppelstunde).",
+    "- Lass den Raum leer, wenn keiner angegeben ist.",
+    "- Pausen, Freistunden und leere Felder lässt du weg.",
+    "Schreib außer diesen Zeilen nichts.",
+  ].join("\n");
+}
+function parseTimetable(text) {
+  const out = [];
+  const tok = v => {
+    v = (v || "").trim();
+    let m = v.match(/^(\d{1,2})[:.](\d{2})/); if (m && +m[1] < 24 && +m[2] < 60) return { time: `${pad(+m[1])}:${m[2]}` };
+    m = v.match(/^(\d{1,2})\.?\s*(?:std\.?|stunde)?$/i); if (m && +m[1] >= 0 && +m[1] <= 15) return { period: +m[1] };
+    return {};
+  };
+  for (const raw of String(text || "").replace(/\*\*/g, "").split("\n")) {
+    const l = raw.replace(/^[\s\-*•]+/, "").trim();
+    const m = l.match(/^(?:STUNDE\s*:\s*)?([A-Za-zÄÖÜäöü]{2,10})\.?\s*\|([^|]*)\|([^|]*)\|([^|]+?)\s*(?:\|(.*))?$/i);
+    if (!m) continue;
+    const day = DAY_MAP[m[1].toLowerCase()]; if (day == null) continue;
+    const subject = m[4].trim().replace(/^[„"']|[“"']$/g, ""); if (!subject || /^(frei|pause|-+)$/i.test(subject)) continue;
+    const a = tok(m[2]), b = tok(m[3]);
+    out.push({ day, start: a.time || "", end: b.time || "", pFrom: a.period || null, pTo: b.period || a.period || null, subject, room: (m[5] || "").trim().replace(/^[-–—]+$/, "") });
+  }
+  return out;
+}
+function matchSubject(name) {
+  const n = name.trim().toLowerCase(), subs = db.subjects;
+  const exact = subs.find(x => x.name.trim().toLowerCase() === n); if (exact) return exact;
+  const pre = subs.filter(x => { const k = x.name.trim().toLowerCase(); return k.length >= 2 && n.length >= 2 && (k.startsWith(n) || n.startsWith(k)); });
+  return pre.length === 1 ? pre[0] : null;
+}
+function drawTtImport() {
+  const w = $("#ttImpWrap"); if (!w) return;
+  if (!ttImp) { w.innerHTML = `<button class="btn ghost" id="ttImpOpen" style="width:100%;margin-top:12px">Aus Screenshot importieren</button>`; $("#ttImpOpen").addEventListener("click", () => { ttImp = { file: null, text: "" }; drawTtImport(); }); return; }
+  const app = AI_APPS[db.settings.aiApp] || AI_APPS.chatgpt, f = ttImp.file;
+  const canShare = !!(f && navigator.canShare && navigator.canShare({ files: [f] }));
+  const parsed = parseTimetable(ttImp.text);
+  w.innerHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <div class="row"><b class="grow">Stundenplan aus Screenshot</b><button class="icon-btn" id="ttImpClose" aria-label="Schließen">✕</button></div>
+    <div class="step"><span class="n">1</span><div class="grow">
+      <button class="btn ghost" id="ttPick" style="width:100%;white-space:normal">${f ? `Screenshot gewählt: ${esc(f.name)}` : "Screenshot auswählen"}</button>
+      <input type="file" id="ttFile" accept="image/*" hidden></div></div>
+    <div class="step"><span class="n">2</span><div class="grow">
+      <button class="btn" id="ttAsk" style="width:100%;white-space:normal">${canShare ? "Anfrage kopieren & Screenshot teilen" : `Anfrage kopieren${app.url ? ` & ${app.name} öffnen` : ""}`}</button>
+      <div class="small muted" style="margin-top:6px">${canShare ? `Im Teilen-Menü ${app.url ? app.name : "deine KI-App"} wählen, Anfrage einfügen, senden.` : `In ${app.url ? app.name : "der KI-App"}: Anfrage einfügen, Screenshot anhängen, senden.`} Dann die Antwort kopieren.</div></div></div>
+    <div class="step"><span class="n">3</span><div class="grow">
+      <button class="btn ghost" id="ttPaste" style="width:100%">Antwort einfügen</button>
+      <textarea id="ttAns" placeholder="… oder die Antwort hier hineinkopieren" style="margin-top:8px">${esc(ttImp.text)}</textarea></div></div>
+    <div id="ttPrev"></div></div>`;
+  const drawPrev = () => {
+    const ps = parseTimetable(ttImp.text), pv = $("#ttPrev");
+    if (!ttImp.text.trim()) { pv.innerHTML = ""; return; }
+    if (!ps.length) { pv.innerHTML = `<div class="small" style="color:var(--critical);margin-top:10px">Keine Stunden erkannt. Die KI sollte jede Stunde als „STUNDE: Mo | 08:00 | 08:45 | Mathe | R 204“ schreiben.</div>`; return; }
+    const newSubs = [...new Set(ps.filter(x => !matchSubject(x.subject)).map(x => x.subject))];
+    pv.innerHTML = `<div class="ok-box" style="margin-top:12px"><b>${ps.length} Stunden erkannt</b>${newSubs.length ? `<div class="small" style="margin-top:4px">Neue Fächer werden angelegt: ${esc(newSubs.join(", "))}</div>` : ""}</div>
+      ${DAYS_LONG.map((dn, di) => { const ls = ps.filter(x => x.day === di).sort((a, b) => lessonKey(a).localeCompare(lessonKey(b))); return ls.length ? `<div class="group-title" style="margin-top:10px">${dn}</div>` +
+        ls.map(x => { const m = matchSubject(x.subject); return `<div class="entry"><span class="small muted" style="width:94px;flex:none">${lessonTime(x)}</span><div class="grow"><b>${esc(m ? m.name : x.subject)}</b>${x.room ? ` <span class="small muted">· ${esc(x.room)}</span>` : ""}</div>${m ? "" : `<span class="tag">neu</span>`}</div>`; }).join("") : ""; }).join("")}
+      <button class="btn" id="ttTake" style="width:100%;margin-top:12px">${db.timetable.length ? "Übernehmen und alten Plan ersetzen" : "Stundenplan übernehmen"}</button>
+      ${db.timetable.length ? `<button class="btn ghost" id="ttAdd" style="width:100%;margin-top:8px">Zum bestehenden Plan hinzufügen</button>` : ""}`;
+    const take = replace => {
+      if (replace && !confirm("Deinen bisherigen Stundenplan durch den neuen ersetzen?")) return;
+      if (replace) db.timetable = [];
+      ps.forEach(x => {
+        let sub = matchSubject(x.subject);
+        if (!sub) { sub = { id: uid(), name: x.subject }; db.subjects.push(sub); }
+        db.timetable.push({ id: uid(), day: x.day, subjectId: sub.id, start: x.start, end: x.end, pFrom: x.pFrom, pTo: x.pTo, room: x.room });
+      });
+      const n = ps.length; ttImp = null; ttDay = Math.min(4, weekdayIdx(today())); save(); render(); toast(`${n} Stunden übernommen`);
+    };
+    $("#ttTake").addEventListener("click", () => take(db.timetable.length > 0));
+    const add = $("#ttAdd"); if (add) add.addEventListener("click", () => take(false));
+  };
+  $("#ttImpClose").addEventListener("click", () => { ttImp = null; drawTtImport(); });
+  $("#ttPick").addEventListener("click", () => $("#ttFile").click());
+  $("#ttFile").addEventListener("change", e => { const file = e.target.files[0]; if (file) { ttImp.file = file; drawTtImport(); } });
+  $("#ttAsk").addEventListener("click", () => {
+    copyText(ttPrompt()).then(ok => toast(ok ? "Anfrage kopiert" : "Kopieren nicht möglich"));
+    if (canShare) navigator.share({ files: [f] }).catch(() => {});
+    else if (app.url) window.open(app.url, "_blank");
+  });
+  $("#ttPaste").addEventListener("click", async () => {
+    try { ttImp.text = await navigator.clipboard.readText(); $("#ttAns").value = ttImp.text; drawPrev(); }
+    catch (e) { $("#ttAns").focus(); toast("Lange in das Feld tippen → Einsetzen"); }
+  });
+  $("#ttAns").addEventListener("input", e => { ttImp.text = e.target.value; drawPrev(); });
+  drawPrev();
+}
+
 function renderSchool() {
   if (schoolLearn) return renderLearn();
   if (schoolSub && db.subjects.some(s => s.id === schoolSub)) return renderSubject();
@@ -1753,20 +1855,22 @@ function renderSchool() {
       }).join("") : `<div class="empty">Noch keine Fächer. Leg unten dein erstes an.</div>`}
       <form class="row" id="subjForm" style="margin-top:12px"><input id="subjName" placeholder="Neues Fach, z. B. Mathe" autocomplete="off" required><button class="btn" type="submit">Anlegen</button></form>
     </div>
-    ${db.subjects.length ? (() => {
+    ${(() => {
       if (ttDay == null) ttDay = Math.min(4, weekdayIdx(today()));
       const ls = lessonsOn(ttDay);
-      return `<div class="card"><h2>Stundenplan</h2>
+      return `<div class="card" id="ttCard"><h2>Stundenplan</h2>
         <div class="seg" id="ttSeg" style="display:flex;margin-bottom:8px">${DAYS.map((d, i) => `<button class="grow ${i === ttDay ? "on" : ""}" data-d="${i}">${d}</button>`).join("")}</div>
-        ${ls.length ? ls.map(l => lessonRow(l, true)).join("") : `<div class="empty">Für ${DAYS_LONG[ttDay]} ist noch nichts eingetragen.</div>`}
+        ${ls.length ? ls.map(l => lessonRow(l, true)).join("") : `<div class="empty">${db.timetable.length ? `Für ${DAYS_LONG[ttDay]} ist nichts eingetragen.` : "Noch kein Stundenplan. Am schnellsten geht es mit einem Screenshot."}</div>`}
+        <div id="ttImpWrap"></div>
+        ${db.subjects.length ? `<details style="margin-top:12px"><summary class="small muted">Stunde von Hand hinzufügen</summary>
         <form id="ttForm" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
           <div class="row"><div class="grow"><label class="f">Fach</label><select id="ttSub">${db.subjects.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></div>
             <div style="width:90px"><label class="f">Raum</label><input id="ttRoom" placeholder="optional" autocomplete="off"></div></div>
           <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Von</label><input type="time" id="ttStart" value="${ls.length && ls[ls.length - 1].end ? ls[ls.length - 1].end : "08:00"}"></div>
             <div class="grow"><label class="f">Bis</label><input type="time" id="ttEnd"></div></div>
           <button class="btn" type="submit" style="width:100%;margin-top:10px">Stunde am ${DAYS_LONG[ttDay]} hinzufügen</button>
-        </form></div>`;
-    })() : ""}
+        </form></details>` : ""}</div>`;
+    })()}
     ${db.subjects.length ? (() => {
       const ws = weekStartIso(), tot = focusMinutes(ws, today()), per = db.subjects.map(x => [x, focusMinutes(ws, today(), x.id)]).filter(x => x[1]).sort((a, b) => b[1] - a[1]);
       const mx = per.length ? per[0][1] : 1;
@@ -1791,6 +1895,7 @@ function renderSchool() {
   $("#view").querySelectorAll(".subj").forEach(el => el.addEventListener("click", () => openSubject(el.dataset.id)));
   bindLessons();
   const tts = $("#ttSeg"); if (tts) tts.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { ttDay = +b.dataset.d; render(); } });
+  drawTtImport();
   const ttf = $("#ttForm");
   if (ttf) ttf.addEventListener("submit", e => {
     e.preventDefault();
