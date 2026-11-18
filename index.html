@@ -26,6 +26,7 @@
     --c-sleep: #2f8fe8;
     --c-todo: #d99a1e;
     --c-home: #2f8fe8;
+    --c-water: #12a4b6;
     --accent: var(--c-home);
     --good: #1fa968;
     --critical: #e66767;
@@ -221,6 +222,9 @@
   .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 70; overflow: hidden; }
   .confetti i { position: absolute; top: -14px; width: 8px; height: 13px; border-radius: 2px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translate(var(--dx), 105vh) rotate(var(--r)); } }
+  .drops { display: grid; grid-template-columns: repeat(auto-fit, minmax(14px, 1fr)); gap: 6px; }
+  .drops i { height: 22px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: var(--surface-2); border: 1px solid var(--border); }
+  .drops i.on { background: var(--c-water); border-color: var(--c-water); }
   .ok-box { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
 </style>
 </head>
@@ -244,8 +248,8 @@
 "use strict";
 /* ---------- Speicher ---------- */
 const KEY = "tagwerk_v1";
-const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [], plans: [], workouts: [], gymNotes: [], activeWorkout: null, timetable: [], grades: [], focus: [], learnLog: [], focusActive: null, weekNotes: [], badges: [],
-  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90, focusMin: 25, breakMin: 5, gradeSystem: "noten", studyGoal: 50, trainGoal: 3 } });
+const blank = () => ({ todos: [], weights: [], sleep: [], meals: [], favorites: [], subjects: [], files: [], exams: [], notes: [], cards: [], plans: [], workouts: [], gymNotes: [], activeWorkout: null, timetable: [], grades: [], focus: [], learnLog: [], focusActive: null, weekNotes: [], badges: [], water: [], supps: [],
+  settings: { goalWeight: null, sleepGoal: 8, kcalGoal: null, proteinGoal: null, carbGoal: null, fatGoal: null, aiApp: "chatgpt", grade: "", restSec: 90, focusMin: 25, breakMin: 5, gradeSystem: "noten", studyGoal: 50, trainGoal: 3, waterGoal: 2500, creatineOn: false } });
 const normalize = d => Object.assign(blank(), d && typeof d === "object" ? d : {}, { settings: Object.assign(blank().settings, (d && d.settings) || {}) });
 let db = load();
 function load() {
@@ -662,6 +666,8 @@ const ICONS = {
   sleep: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   todo: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
   week: '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  water: '<path d="M12 3s6 6.6 6 11a6 6 0 0 1-12 0c0-4.4 6-11 6-11z"/>',
+  pill: '<rect x="3" y="8.5" width="18" height="7" rx="3.5" transform="rotate(-35 12 12)"/><path d="M9.6 8.6l4.8 6.8" />',
   more: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
 };
 const chip = (area, icon) => `<span class="chip" style="--c:var(--c-${area})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[icon || area]}</svg></span>`;
@@ -689,6 +695,41 @@ function sleepBars7() {
     ${days.map((d, i) => { const v = map[d], x = i * (bw + gap); return v ? `<rect x="${x}" y="${Y(v)}" width="${bw}" height="${H - Y(v)}" rx="3" fill="var(--c-sleep)" fill-opacity="${d === today() ? 1 : .55}"/>` : `<rect x="${x}" y="${H - 3}" width="${bw}" height="3" rx="1.5" fill="var(--border)"/>`; }).join("")}</svg>`;
 }
 
+/* ---------- Wasser & Kreatin ---------- */
+const waterOn = d => db.water.filter(w => w.date === d).reduce((t, w) => t + w.ml, 0);
+const creatineOnDay = d => db.supps.some(x => x.date === d && x.kind === "kreatin");
+function addWater(ml) {
+  const before = waterOn(today()), goal = db.settings.waterGoal || 2500;
+  db.water.push({ id: uid(), date: today(), ml }); save(); render();
+  if (before < goal && before + ml >= goal) celebrateOnce("water", "Trinkziel erreicht!"); else toast(`+${ml} ml`);
+}
+function undoWater() {
+  const mine = db.water.filter(w => w.date === today()); if (!mine.length) return;
+  const last = mine[mine.length - 1]; db.water = db.water.filter(w => w.id !== last.id); save(); render(); toast(`${last.ml} ml entfernt`);
+}
+function toggleCreatine() {
+  if (creatineOnDay(today())) db.supps = db.supps.filter(x => !(x.date === today() && x.kind === "kreatin"));
+  else db.supps.push({ id: uid(), date: today(), kind: "kreatin" });
+  save(); render();
+}
+function waterCard() {
+  const ml = waterOn(today()), goal = db.settings.waterGoal || 2500, cr = creatineOnDay(today());
+  const crStreak = streakFrom(new Set(db.supps.filter(x => x.kind === "kreatin").map(x => x.date)));
+  return `<div class="card" style="--accent:var(--c-water)">
+    ${cardHead("water", "water", "Trinken", `<span class="small muted"><b style="color:var(--text);font-size:15px">${fmt(ml / 1000, ml % 1000 ? 2 : 0).replace(/0$/, "")}</b> / ${fmt(goal / 1000, goal % 1000 ? 1 : 0)} l</span>`)}
+    <div class="drops" aria-hidden="true">${Array.from({ length: Math.min(12, Math.round(goal / 250)) }, (_, i) => `<i class="${(i + 1) * 250 <= ml + 1 ? "on" : ""}"></i>`).join("")}</div>
+    <div class="row" style="margin-top:10px"><button class="btn grow wa-add" data-ml="250">+ 250 ml</button><button class="btn grow wa-add" data-ml="500">+ 500 ml</button><button class="btn ghost wa-undo" aria-label="Letzten Eintrag rückgängig" ${ml ? "" : "disabled"}>↶</button></div>
+    ${db.settings.creatineOn ? `<div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      ${chip("school", "pill").replace("var(--c-school)", "var(--c-water)")}<div class="grow"><b>Kreatin</b><div class="small muted">${cr ? "Heute genommen" : "Heute noch nicht"}${crStreak >= 2 ? ` · ${crStreak} Tage in Folge` : ""}</div></div>
+      <button class="check ${cr ? "done" : ""} cr-tog" style="width:30px;height:30px;${cr ? "background:var(--c-water);border-color:var(--c-water)" : ""}" aria-label="Kreatin genommen"></button></div>` : ""}
+  </div>`;
+}
+function bindWater() {
+  $("#view").querySelectorAll(".wa-add").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); addWater(+b.dataset.ml); }));
+  $("#view").querySelectorAll(".wa-undo").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); undoWater(); }));
+  $("#view").querySelectorAll(".cr-tog").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); toggleCreatine(); }));
+}
+
 /* ---------- Motivation: Serien, Abzeichen, Konfetti ---------- */
 function streakFrom(okSet) { // aktuelle Serie bis heute (zählt auch, wenn heute noch nichts eingetragen ist)
   let d = today(); if (!okSet.has(d)) d = addDays(d, -1);
@@ -705,6 +746,8 @@ function dataSets() {
     protein: new Set(st.proteinGoal ? [...mealDates].filter(d => dayTotals(d).p >= st.proteinGoal * .95) : []),
     study: new Set([...db.focus.map(f => f.date), ...db.learnLog.map(l => l.date)]),
     sleep: new Set(db.sleep.filter(e => sleepHours(e) >= (st.sleepGoal || 8) - .25).map(e => e.date)),
+    water: new Set([...new Set(db.water.map(w => w.date))].filter(d => waterOn(d) >= (st.waterGoal || 2500))),
+    creatine: new Set(db.supps.filter(x => x.kind === "kreatin").map(x => x.date)),
   };
 }
 function trainWeekStreak() {
@@ -733,6 +776,8 @@ const BADGES = [
   { key: "g1", area: "school", icon: "school", name: "Glanzleistung", desc: "Eine Note 1 oder 13+ Punkte", goal: 1, val: () => db.grades.some(g => (g.system || "noten") === "punkte" ? g.value >= 13 : g.value <= 1.3) ? 1 : 0 },
   { key: "sl7", area: "sleep", icon: "sleep", name: "Ausgeschlafen", desc: "7 Nächte in Folge dein Schlafziel", goal: 7, val: d => maxStreak(d.sleep) },
   { key: "gw", area: "body", icon: "weight", name: "Am Ziel", desc: "Ø 7 Tage auf deinem Zielgewicht (±0,3 kg)", goal: 1, val: () => { const w = weightStats(), g = db.settings.goalWeight; return w && g && Math.abs(w.avg - g) <= .3 ? 1 : 0; }, needs: () => db.settings.goalWeight },
+  { key: "wa7", area: "water", icon: "water", name: "Gut versorgt", desc: "7 Tage in Folge dein Trinkziel", goal: 7, val: d => maxStreak(d.water) },
+  { key: "cr14", area: "water", icon: "pill", name: "Kreatin-Routine", desc: "14 Tage in Folge Kreatin genommen", goal: 14, val: d => maxStreak(d.creatine), needs: () => db.settings.creatineOn },
   { key: "t50", area: "todo", icon: "todo", name: "Erledigt", desc: "50 Todos abgehakt", goal: 50, val: () => db.todos.filter(t => t.done).length },
   { key: "wk1", area: "home", icon: "week", name: "Rückblick", desc: "Einen Wochenrückblick gespeichert", goal: 1, val: () => db.weekNotes.length },
 ];
@@ -772,6 +817,8 @@ function streakChips() {
     ...(st.proteinGoal ? [["food", streakFrom(d.protein), "Tage Proteinziel"]] : []),
     ["school", streakFrom(d.study), "Tage gelernt"],
     ["sleep", streakFrom(d.sleep), "Nächte ausgeschlafen"],
+    ["water", streakFrom(d.water), "Tage Trinkziel"],
+    ...(st.creatineOn ? [["water", streakFrom(d.creatine), "Tage Kreatin"]] : []),
     ["body", trainWeekStreak(), "Wochen Trainingsziel"],
   ].filter(x => x[1] >= 2).sort((a, b) => b[1] - a[1]);
   return list.length ? `<div class="streaks">${list.map(([a, n, t]) => `<span class="streak" style="--c:var(--c-${a})">${FLAME}<b>${n}</b> ${t}</span>`).join("")}</div>` : "";
@@ -841,6 +888,7 @@ function renderHome() {
       ${cardHead("food", "food", "Ernährung heute")}
       ${nutritionSummary(today(), true)}
     </div>
+    ${waterCard()}
 
     <div class="tiles">
       <div class="card tile area-body dash-link" data-go="weight">
@@ -867,7 +915,7 @@ function renderHome() {
         <div class="row" style="gap:10px">${got.slice(0, 4).map(b => badgeMedal(b, 44)).join("")}${got.length ? "" : `<span class="small muted">Noch keins. Das nächste ist ganz nah!</span>`}</div>
         ${next ? `<div class="small" style="margin-top:12px"><span class="muted">Als Nächstes:</span> <b>${esc(next.name)}</b> <span class="muted">· ${next.v} von ${next.goal}</span></div><div class="bar" style="--accent:var(--c-${next.area})"><span style="width:${next.v / next.goal * 100}%"></span></div>` : ""}</div>`; })()}
     <button class="btn ghost" data-go="week" style="width:100%">Wochenrückblick ansehen</button>`;
-  bindTodoEvents(); bindLessons();
+  bindTodoEvents(); bindLessons(); bindWater();
   setTimeout(() => {
     if (tab !== "home") return;
     if (st.kcalGoal && foodPct >= 1 || !st.kcalGoal && st.proteinGoal && foodPct >= 1) celebrateOnce("food", "Ernährungsziel für heute erreicht!");
@@ -887,7 +935,7 @@ function todoRow(t) {
   return `<div class="todo ${t.done ? "isdone" : ""}" data-id="${t.id}">
     <button class="check ${t.done ? "done" : ""}" aria-label="Erledigt"></button>
     <div class="t">${esc(t.text)}<div class="row" style="gap:6px;margin-top:2px">
-      ${t.cat ? `<span class="tag">${esc(t.cat)}</span>` : ""}
+      ${t.subjectId && db.subjects.some(x => x.id === t.subjectId) ? `<span class="tag" style="border-color:var(--c-school)">${esc(subjName(t.subjectId))}</span>` : t.cat ? `<span class="tag">${esc(t.cat)}</span>` : ""}
       ${t.due ? `<span class="due ${late ? "late" : ""}">${relDay(t.due)}</span>` : ""}
     </div></div>
     ${tab === "todos" ? `<button class="icon-btn del" aria-label="Löschen">✕</button>` : ""}
@@ -925,6 +973,9 @@ function renderTodos() {
         <div class="grow"><label class="f">Fällig</label><input type="date" id="tDue" value="${td}"></div>
         <div class="grow"><label class="f">Bereich</label><select id="tCat">${CATS.map(c => `<option>${c}</option>`).join("")}</select></div>
       </div>
+      ${db.subjects.length ? `<div id="tSubWrap" style="margin-top:10px"><label class="f">Fach (setzt das Datum auf die nächste Stunde)</label>
+        <select id="tSub"><option value="">Kein bestimmtes Fach</option>${db.subjects.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select>
+        <div class="small muted" id="tNext" style="margin-top:6px"></div></div>` : ""}
       <div class="row" style="margin-top:12px"><button class="btn grow" type="submit">Hinzufügen</button></div>
     </form>
     <div class="card">
@@ -938,9 +989,21 @@ function renderTodos() {
   $("#todoForm").addEventListener("submit", e => {
     e.preventDefault();
     const text = $("#tText").value.trim(); if (!text) return;
-    db.todos.push({ id: uid(), text, due: $("#tDue").value || null, cat: $("#tCat").value, done: false, created: td });
+    const sub = $("#tSub") && $("#tCat").value === "Schule" ? $("#tSub").value : "";
+    db.todos.push({ id: uid(), text, due: $("#tDue").value || null, cat: $("#tCat").value, subjectId: sub || null, done: false, created: td });
     save(); render(); toast("Aufgabe hinzugefügt");
   });
+  const tSub = $("#tSub");
+  if (tSub) {
+    const sync = () => { $("#tSubWrap").hidden = $("#tCat").value !== "Schule"; };
+    $("#tCat").addEventListener("change", sync); sync();
+    tSub.addEventListener("change", () => {
+      const sid = tSub.value, msg = $("#tNext"); if (!sid) { msg.textContent = ""; return; }
+      const d = nextLessonDate(sid);
+      if (d) { $("#tDue").value = d; msg.textContent = `Fällig zur nächsten ${subjName(sid)}-Stunde: ${WD[parse(d).getDay()]}, ${short(d)}`; }
+      else msg.textContent = `${subjName(sid)} steht nicht in deinem Stundenplan. Wähl das Datum selbst.`;
+    });
+  }
   const tg = $("#toggleDone"); if (tg) tg.addEventListener("click", () => { showDone = !showDone; render(); });
   const cd = $("#clearDone"); if (cd) cd.addEventListener("click", () => {
     if (confirm("Alle erledigten Aufgaben löschen?")) { db.todos = db.todos.filter(t => !t.done); save(); render(); }
@@ -1303,6 +1366,7 @@ function renderFood() {
       <button class="icon-btn" id="fNext" aria-label="Nächster Tag" ${isToday ? "disabled style='opacity:.3'" : ""}>›</button>
     </div>
     <div class="card">${nutritionSummary(fDate)}</div>
+    ${isToday ? waterCard() : ""}
     <div class="card"><h2>Makros ${isToday ? "heute" : "an diesem Tag"}</h2>${macroDonut(dayTotals(fDate))}</div>
     <div class="card"><h2>Kalorien, letzte 14 Tage</h2><div class="chart" id="kcalBars"></div></div>
 
@@ -1392,6 +1456,7 @@ function renderFood() {
     });
     row.querySelector(".f-del").addEventListener("click", () => { if (confirm(`„${f.name}“ aus den Favoriten entfernen?`)) { db.favorites = db.favorites.filter(x => x.id !== f.id); save(); render(); } });
   });
+  bindWater();
   barChart($("#kcalBars"), dayItems(14, d => { const t = dayTotals(d); return { value: t.kcal, tip: `${WD[parse(d).getDay()]}, ${short(d)}<br><b>${round(t.kcal).toLocaleString("de-DE")} kcal</b> · ${round(t.p)} g Protein` }; }),
     { color: "var(--c-food)", goal: db.settings.kcalGoal, goalLabel: "Kalorienziel", label: "Kalorien", empty: "Noch keine Mahlzeiten in den letzten 14 Tagen." });
   if (fDraft) drawEditor();
@@ -1652,7 +1717,85 @@ function examRow(e, deletable) {
   return `<div class="entry" data-exam="${e.id}"><div class="grow"><div>${esc(e.title)}</div>
     <div class="small muted">${esc(subjName(e.subjectId))} · ${e.type} · ${WD[parse(e.date).getDay()]}, ${short(e.date)}</div></div>
     <span class="tag" style="${n <= 3 ? "border-color:var(--accent);color:var(--text)" : ""}">${countdown(e.date)}</span>
-    ${deletable ? `<button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
+    ${deletable ? `<button class="btn small ghost ex-plan">${db.todos.some(t => t.examId === e.id) ? "Lernplan ✓" : "Lernplan"}</button><button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
+}
+/* Lernplan für eine Klausur (über die KI-App) */
+let planExam = null, planText = "";
+function planDays(exam) {
+  const until = addDays(exam.date, -1), n = dayDiff(today(), until);
+  if (n < 0) return [];
+  const start = n <= 1 ? today() : addDays(today(), 1), out = [];
+  for (let d = start; d <= until && out.length < 28; d = addDays(d, 1)) out.push(d);
+  return out.length > 21 ? out.slice(-21) : out;
+}
+function planPrompt(exam, topics, minutes, withCards) {
+  const days = planDays(exam), dd = d => { const x = parse(d); return `${WD[x.getDay()]} ${d}`; };
+  return [
+    `Ich schreibe am ${WD[parse(exam.date).getDay()]}, ${exam.date} eine ${exam.type} in ${subjName(exam.subjectId)}: „${exam.title}“.${db.settings.grade ? ` Ich bin in ${db.settings.grade}.` : ""}`,
+    `Themen: ${topics || "(siehe angehängtes Material)"}`,
+    `Ich kann an diesen Tagen lernen, jeweils etwa ${minutes} Minuten: ${days.map(dd).join(", ")}.`,
+    "Erstelle mir einen Lernplan. Verteile den Stoff sinnvoll: erst verstehen, dann üben, am Ende wiederholen und eine Probeklausur. Der letzte Tag vor der Klausur ist nur leichte Wiederholung. Ein Tag darf auch frei bleiben, wenn genug Zeit ist.",
+    "Schreib für jeden Lerntag genau eine Zeile in diesem Format (Datum genau wie oben):",
+    "TAG: JJJJ-MM-TT | Aufgabe, kurz und konkret",
+    withCards ? "Schreib danach 15 bis 25 Karteikarten zu den Themen, jede in einer eigenen Zeile:\nF: <Frage> | A: <Antwort>" : "",
+    "Schreib sonst nichts.",
+  ].filter(Boolean).join("\n");
+}
+function parsePlan(text, exam) {
+  const out = [], seen = new Set(), minD = today(), maxD = exam.date;
+  for (const raw of String(text || "").replace(/\*\*/g, "").split("\n")) {
+    const m = raw.trim().match(/^(?:[-*•]\s*)?(?:TAG\s*:\s*)?(?:[A-Za-zÄÖÜäöü]{2,10},?\s*)?(\d{4}-\d{2}-\d{2}|\d{1,2}\.\d{1,2}\.(?:\d{2,4})?)\s*[|:–-]\s*(.+)$/i);
+    if (!m) continue;
+    let d = m[1];
+    if (d.includes(".")) { const [dd, mm, yy] = d.split("."); let y = yy ? (yy.length === 2 ? 2000 + +yy : +yy) : +today().slice(0, 4); d = `${y}-${pad(+mm)}-${pad(+dd)}`; if (!yy && d < addDays(minD, -1)) d = `${y + 1}-${pad(+mm)}-${pad(+dd)}`; }
+    if (isNaN(parse(d)) || d < minD || d >= maxD) continue;
+    const task = m[2].trim().replace(/^\|\s*/, ""); if (!task || /^(frei|pause)$/i.test(task)) continue;
+    const k = d + task; if (seen.has(k)) continue; seen.add(k); out.push({ date: d, task: task.slice(0, 160) });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+function drawPlan(s) {
+  const w = $("#planWrap"); if (!w) return;
+  const ex = db.exams.find(e => e.id === planExam);
+  if (!ex) { w.innerHTML = ""; return; }
+  const app = AI_APPS[db.settings.aiApp] || AI_APPS.chatgpt, days = planDays(ex);
+  w.innerHTML = `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <div class="row"><b class="grow">Lernplan: ${esc(ex.title)}</b><button class="icon-btn" id="plClose" aria-label="Schließen">✕</button></div>
+    ${days.length ? `<div class="small muted">${days.length} Lerntag${days.length > 1 ? "e" : ""} bis zur ${esc(ex.type)}</div>
+    <label class="f" style="margin-top:10px">Themen der ${esc(ex.type)}</label><textarea id="plTopics" placeholder="z. B. Ableitungsregeln, Kurvendiskussion, Extrempunkte"></textarea>
+    <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Minuten pro Tag</label><input id="plMin" inputmode="numeric" value="30"></div>
+      <label class="grow row small" style="gap:8px;color:var(--text-2);margin-top:18px"><input type="checkbox" id="plCards" checked style="width:20px;height:20px;flex:none;-webkit-appearance:checkbox;appearance:auto"> Karteikarten dazu</label></div>
+    <div class="step"><span class="n">1</span><div class="grow"><button class="btn" id="plAsk" style="width:100%;white-space:normal">Anfrage kopieren${app.url ? ` & ${app.name} öffnen` : ""}</button>
+      <div class="small muted" style="margin-top:6px">Tipp: Häng in ${app.url ? app.name : "der KI-App"} dein Material an (Skript, Arbeitsblatt), dann wird der Plan genauer.</div></div></div>
+    <div class="step"><span class="n">2</span><div class="grow"><button class="btn ghost" id="plPaste" style="width:100%">Antwort einfügen</button>
+      <textarea id="plAns" placeholder="… oder die Antwort hier hineinkopieren" style="margin-top:8px">${esc(planText)}</textarea></div></div>
+    <div id="plPrev"></div>` : `<div class="empty">Die ${esc(ex.type)} ist schon morgen oder vorbei. Viel Erfolg!</div>`}</div>`;
+  $("#plClose").addEventListener("click", () => { planExam = null; planText = ""; drawPlan(s); });
+  if (!days.length) return;
+  const prev = () => {
+    const pv = $("#plPrev"), steps = parsePlan(planText, ex), cards = parseCards(planText);
+    if (!planText.trim()) { pv.innerHTML = ""; return; }
+    if (!steps.length) { pv.innerHTML = `<div class="small" style="color:var(--critical);margin-top:10px">Keine Lerntage erkannt. Die KI sollte jede Zeile als „TAG: ${days[0]} | Aufgabe“ schreiben.</div>`; return; }
+    const old = db.todos.filter(t => !t.done && (t.examId === ex.id || t.text.startsWith(`Lernen: ${ex.title} (`))).length;
+    pv.innerHTML = `<div class="ok-box" style="margin-top:12px"><b>${steps.length} Lerntage${cards.length ? ` und ${cards.length} Karteikarten` : ""} erkannt</b>${old ? `<div class="small" style="margin-top:4px">${old} bisherige Lern-Todos für diese ${esc(ex.type)} werden ersetzt.</div>` : ""}</div>
+      ${steps.map(x => `<div class="entry"><span class="small muted" style="width:76px;flex:none">${WD[parse(x.date).getDay()]}, ${short(x.date)}</span><span class="grow small">${esc(x.task)}</span></div>`).join("")}
+      <button class="btn" id="plTake" style="width:100%;margin-top:12px">Lernplan übernehmen</button>`;
+    $("#plTake").addEventListener("click", () => {
+      db.todos = db.todos.filter(t => t.done || !(t.examId === ex.id || t.text.startsWith(`Lernen: ${ex.title} (`)));
+      steps.forEach(x => db.todos.push({ id: uid(), text: `${subjName(ex.subjectId)}: ${x.task}`, due: x.date, cat: "Schule", subjectId: ex.subjectId, examId: ex.id, done: false, created: today() }));
+      const have = new Set(db.cards.filter(c => c.subjectId === ex.subjectId).map(c => c.q.toLowerCase())); let nc = 0;
+      cards.forEach(c => { if (!have.has(c.q.toLowerCase())) { db.cards.push({ id: uid(), subjectId: ex.subjectId, q: c.q, a: c.a, box: 1, due: today() }); have.add(c.q.toLowerCase()); nc++; } });
+      planExam = null; planText = ""; save(); render(); toast(`${steps.length} Lern-Todos${nc ? ` und ${nc} Karten` : ""} angelegt`);
+    });
+  };
+  $("#plAsk").addEventListener("click", () => {
+    const min = Math.max(10, Math.min(240, Math.round(num($("#plMin").value) || 30)));
+    copyText(planPrompt(ex, $("#plTopics").value.trim(), min, $("#plCards").checked)).then(ok => toast(ok ? "Anfrage kopiert" : "Kopieren nicht möglich"));
+    if (app.url) window.open(app.url, "_blank");
+  });
+  $("#plPaste").addEventListener("click", async () => { try { planText = await navigator.clipboard.readText(); $("#plAns").value = planText; prev(); } catch (e) { $("#plAns").focus(); toast("Lange in das Feld tippen → Einsetzen"); } });
+  $("#plAns").addEventListener("input", e => { planText = e.target.value; prev(); });
+  prev();
 }
 /* Stundenplan */
 const DAYS = ["Mo", "Di", "Mi", "Do", "Fr"], DAYS_LONG = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"];
@@ -1672,6 +1815,12 @@ function bindLessons() {
     if (e.target.closest(".l-del")) { if (confirm("Stunde löschen?")) { db.timetable = db.timetable.filter(x => x.id !== el.dataset.l); save(); render(); } return; }
     if (db.subjects.some(x => x.id === el.dataset.sid)) openSubject(el.dataset.sid);
   }));
+}
+
+/* Hausaufgaben: nächste Stunde eines Fachs laut Stundenplan */
+function nextLessonDate(sid, from = today()) {
+  for (let i = 1; i <= 21; i++) { const d = addDays(from, i), wd = weekdayIdx(d); if (wd < 5 && db.timetable.some(l => l.day === wd && l.subjectId === sid)) return d; }
+  return null;
 }
 
 /* Noten */
@@ -1908,7 +2057,7 @@ function renderSchool() {
   barChart($("#studyBars"), dayItems(14, d => { const mm = focusMinutes(d, d); return { value: mm, tip: `${WD[parse(d).getDay()]}, ${short(d)}<br><b>${fmtMin(mm)}</b> gelernt` }; }),
     { color: "var(--c-school)", goal: db.settings.studyGoal || 50, goalLabel: "Tagesziel", label: "Lernzeit (min)", h: 140, empty: "Starte den Lern-Timer, dann siehst du hier deine Lerntage." });
 }
-function openSubject(id) { schoolSub = id; kiAction = "summary"; kiFileId = ""; kiFileObj = null; kiText = ""; if (tab !== "school") tab = "school"; render(); window.scrollTo(0, 0); }
+function openSubject(id) { planExam = null; planText = ""; schoolSub = id; kiAction = "summary"; kiFileId = ""; kiFileObj = null; kiText = ""; if (tab !== "school") tab = "school"; render(); window.scrollTo(0, 0); }
 
 function renderSubject() {
   const s = db.subjects.find(x => x.id === schoolSub);
@@ -1939,6 +2088,12 @@ function renderSubject() {
         <button class="btn small ghost" id="cardsDel" style="margin-top:8px">Alle Karten löschen</button></details>` : ""}
     </div>
 
+    <div class="card"><h2>Hausaufgaben & Aufgaben</h2>
+      ${(() => { const ts = db.todos.filter(t => !t.done && t.subjectId === s.id).sort((a, b) => (a.due || "9").localeCompare(b.due || "9")); return ts.length ? ts.map(todoRow).join("") : `<div class="empty">Nichts offen in ${esc(s.name)}.</div>`; })()}
+      <form class="row" id="hwForm" style="margin-top:10px"><input id="hwText" placeholder="Neue Hausaufgabe, z. B. S. 54 Nr. 3" autocomplete="off" required><button class="btn" type="submit">+</button></form>
+      <div class="small muted" style="margin-top:6px">${(() => { const d = nextLessonDate(s.id); return d ? `Fällig zur nächsten Stunde: ${WD[parse(d).getDay()]}, ${short(d)}` : "Trag das Fach in deinen Stundenplan ein, dann setzt die App das Datum automatisch."; })()}</div>
+    </div>
+
     <div class="card"><h2>Lern-Timer</h2>
       <div class="row"><div class="grow"><b>${fmtMin(focusMinutes(weekStartIso(), today(), s.id))}</b> <span class="muted small">diese Woche gelernt</span></div>
         ${db.focusActive ? `<span class="small muted">${db.focusActive.subjectId === s.id ? "Läuft gerade" : "Läuft in " + esc(subjName(db.focusActive.subjectId))}</span>`
@@ -1961,6 +2116,7 @@ function renderSubject() {
 
     <div class="card"><h2>Termine</h2>
       ${futureEx.length ? futureEx.map(e => examRow(e, true)).join("") : `<div class="empty">Keine anstehenden Termine.</div>`}
+      <div id="planWrap"></div>
       ${pastN ? `<div class="small muted">${pastN} vergangene${pastN > 1 ? "" : "r"} Termin${pastN > 1 ? "e" : ""}</div>` : ""}
       <form id="exForm" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <input id="exTitle" placeholder="z. B. Klausur Analysis" autocomplete="off" required>
@@ -2029,6 +2185,13 @@ function renderSubject() {
   $("#kiAns").addEventListener("input", e => { kiText = e.target.value; drawKiOut(); });
   const lb = $("#learn"); if (lb) lb.addEventListener("click", () => startLearn(s.id));
   const fg = $("#focusGo"); if (fg) fg.addEventListener("click", () => startFocus(s.id));
+  bindTodoEvents();
+  $("#hwForm").addEventListener("submit", e => {
+    e.preventDefault(); const text = $("#hwText").value.trim(); if (!text) return;
+    const due = nextLessonDate(s.id) || addDays(today(), 1);
+    db.todos.push({ id: uid(), text, due, cat: "Schule", subjectId: s.id, done: false, created: today() });
+    save(); render(); toast(`Hausaufgabe bis ${WD[parse(due).getDay()]}, ${short(due)}`);
+  });
   if ($("#gradeChart")) gradeChart($("#gradeChart"), gradesOf(s.id));
   $("#grType").addEventListener("change", e => { $("#grW").value = e.target.value === "Klausur" ? 2 : 1; });
   $("#grForm").addEventListener("submit", e => {
@@ -2043,6 +2206,8 @@ function renderSubject() {
   }));
   const cdAll = $("#cardsDel"); if (cdAll) cdAll.addEventListener("click", () => { if (confirm("Alle Karteikarten dieses Fachs löschen?")) { db.cards = db.cards.filter(c => c.subjectId !== s.id); save(); render(); } });
   $("#view").querySelectorAll("[data-card] .c-del").forEach(b => b.addEventListener("click", () => { const id = b.closest("[data-card]").dataset.card; db.cards = db.cards.filter(c => c.id !== id); save(); render(); }));
+  $("#view").querySelectorAll("[data-exam] .ex-plan").forEach(b => b.addEventListener("click", () => { planExam = b.closest("[data-exam]").dataset.exam; planText = ""; drawPlan(s); $("#planWrap").scrollIntoView({ behavior: "smooth", block: "start" }); }));
+  drawPlan(s);
   $("#view").querySelectorAll("[data-exam] .ex-del").forEach(b => b.addEventListener("click", () => {
     const id = b.closest("[data-exam]").dataset.exam; if (confirm("Termin löschen?")) { db.exams = db.exams.filter(x => x.id !== id); save(); render(); }
   }));
@@ -2501,6 +2666,17 @@ function renderWeek() {
   }
 }
 
+/* ---------- Ziel-Rechner (Mifflin-St-Jeor) ---------- */
+const CALC_ACT = [[1.2, "Kaum Bewegung"], [1.375, "Wenig: Schule und 1–2× Sport pro Woche"], [1.55, "Mittel: 3–4× Training pro Woche"], [1.725, "Hoch: 5–6× Training pro Woche"], [1.9, "Sehr hoch: täglich hartes Training"]];
+function calcGoals(c) {
+  if (!c.sex || !(c.age >= 10 && c.age <= 99) || !(c.height >= 120 && c.height <= 230) || !(c.weight >= 30 && c.weight <= 250)) return null;
+  const bmr = Math.round(10 * c.weight + 6.25 * c.height - 5 * c.age + (c.sex === "m" ? 5 : -161)), tdee = Math.round(bmr * (c.act || 1.55));
+  const young = c.age < 18, adj = c.goal === "build" ? (young ? 250 : 300) : c.goal === "cut" ? (young ? -250 : -400) : 0;
+  const kcal = Math.round(Math.max(bmr * 1.1, tdee + adj) / 50) * 50;
+  const p = Math.round(c.weight * (c.goal === "cut" ? 2 : c.goal === "build" ? 1.8 : 1.6) / 5) * 5, f = Math.round(kcal * .25 / 9 / 5) * 5;
+  return { bmr, tdee, adj, kcal, p, f, c: Math.max(0, Math.round((kcal - p * 4 - f * 9) / 4 / 5) * 5) };
+}
+
 /* ---------- Mehr ---------- */
 function renderMore() {
   const s = db.settings;
@@ -2543,8 +2719,23 @@ function renderMore() {
       <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Lernen pro Tag (min)</label><input id="gL" inputmode="numeric" value="${s.studyGoal || 50}"></div>
         <div class="grow"><label class="f">Trainings pro Woche</label><input id="gT" inputmode="numeric" value="${s.trainGoal || 3}"></div></div>
       <div style="margin-top:10px"><label class="f">Pause zwischen Sätzen (Sekunden)</label><input id="gR" inputmode="numeric" value="${s.restSec || 90}"></div>
+      <div class="row" style="margin-top:10px"><div class="grow"><label class="f">Wasser pro Tag (ml)</label><input id="gWa" inputmode="numeric" value="${s.waterGoal || 2500}"></div>
+        <label class="grow row small" style="gap:8px;color:var(--text-2);margin-top:18px"><input type="checkbox" id="gCr" ${s.creatineOn ? "checked" : ""} style="width:20px;height:20px;flex:none;-webkit-appearance:checkbox;appearance:auto"> Kreatin-Tracker</label></div>
       <div class="row" style="margin-top:12px"><button class="btn grow" type="submit">Ziele speichern</button></div>
     </form>
+    <div class="card area-food" id="calcCard"><h2>Ziele berechnen</h2>
+      <div class="small muted" style="margin:-4px 0 10px">Schätzt deinen Kalorien- und Proteinbedarf. Das ist ein Startwert: Beobachte 2–3 Wochen deinen Gewichtstrend und pass dann an.</div>
+      <div class="seg" id="cSex" style="display:flex">${[["m", "männlich"], ["w", "weiblich"]].map(([k, l]) => `<button type="button" class="grow ${(s.calc || {}).sex === k ? "on" : ""}" data-v="${k}">${l}</button>`).join("")}</div>
+      <div class="row" style="margin-top:10px">
+        <div class="grow"><label class="f">Alter</label><input id="cAge" inputmode="numeric" value="${(s.calc || {}).age || ""}"></div>
+        <div class="grow"><label class="f">Größe (cm)</label><input id="cH" inputmode="numeric" value="${(s.calc || {}).height || ""}"></div>
+        <div class="grow"><label class="f">Gewicht (kg)</label><input id="cW" inputmode="decimal" value="${weightStats() ? fmt(weightStats().avg) : ""}"></div></div>
+      <label class="f" style="margin-top:10px">Wie aktiv bist du?</label>
+      <select id="cAct">${CALC_ACT.map(([v, l]) => `<option value="${v}" ${String((s.calc || {}).act || 1.55) === String(v) ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <label class="f" style="margin-top:10px">Dein Ziel</label>
+      <select id="cGoal">${[["build", "Muskeln aufbauen (kleiner Überschuss)"], ["keep", "Gewicht halten"], ["cut", "Abnehmen (kleines Defizit)"]].map(([k, l]) => `<option value="${k}" ${((s.calc || {}).goal || "build") === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <div id="cOut" style="margin-top:12px"></div>
+    </div>
     <div class="card"><h2>Schule</h2>
       <label class="f">Klasse und Schulart (hilft der KI, passend zu erklären)</label>
       <input id="grade" placeholder="z. B. Klasse 11, Gymnasium" value="${esc(s.grade || "")}">
@@ -2585,8 +2776,26 @@ function renderMore() {
     s.sleepGoal = sg && sg > 0 && sg < 16 ? sg : 8;
     const pos = id => { const v = num($(id).value); return v && v > 0 ? Math.round(v) : null; };
     s.restSec = pos("#gR") || 90; s.studyGoal = Math.min(600, pos("#gL") || 50); s.trainGoal = Math.min(14, pos("#gT") || 3); s.kcalGoal = pos("#gK"); s.proteinGoal = pos("#gP"); s.carbGoal = pos("#gC"); s.fatGoal = pos("#gF");
+    s.waterGoal = Math.min(8000, pos("#gWa") || 2500); s.creatineOn = $("#gCr").checked;
     save(); toast("Ziele gespeichert");
   });
+  const calcIn = () => ({ sex: ($("#cSex .on") || {}).dataset ? $("#cSex .on").dataset.v : null, age: Math.round(num($("#cAge").value) || 0), height: Math.round(num($("#cH").value) || 0), weight: num($("#cW").value) || 0, act: +$("#cAct").value, goal: $("#cGoal").value });
+  const drawCalc = () => {
+    const c = calcIn(), r = calcGoals(c), out = $("#cOut");
+    if (!r) { out.innerHTML = `<div class="small muted">Wähl dein Geschlecht und trag Alter, Größe und Gewicht ein.</div>`; return; }
+    out.innerHTML = `<div class="ok-box"><div class="row" style="align-items:baseline"><span class="kcal-big" style="font-size:26px">${r.kcal.toLocaleString("de-DE")}</span><span class="muted">&nbsp;kcal pro Tag</span></div>
+      <div class="small" style="margin-top:4px">${r.p} g Protein · ${r.c} g Kohlenhydrate · ${r.f} g Fett</div>
+      <div class="small muted" style="margin-top:6px">Grundumsatz ${r.bmr.toLocaleString("de-DE")} kcal · Gesamtbedarf ${r.tdee.toLocaleString("de-DE")} kcal${r.adj ? ` · ${r.adj > 0 ? "+" : ""}${r.adj} kcal für dein Ziel` : ""}</div></div>
+      ${c.age && c.age < 18 ? `<div class="small" style="margin-top:8px;color:var(--text-2)">Du bist noch im Wachstum. Iss lieber etwas zu viel als zu wenig, und besprich eine Diät am besten mit deinen Eltern oder deiner Ärztin.</div>` : ""}
+      <button class="btn" id="cTake" type="button" style="width:100%;margin-top:10px">Als meine Ziele übernehmen</button>`;
+    $("#cTake").addEventListener("click", () => {
+      s.calc = { sex: c.sex, age: c.age, height: c.height, act: c.act, goal: c.goal };
+      s.kcalGoal = r.kcal; s.proteinGoal = r.p; s.carbGoal = r.c; s.fatGoal = r.f; save(); render(); toast("Ziele übernommen");
+    });
+  };
+  $("#cSex").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; $("#cSex").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); drawCalc(); });
+  ["#cAge", "#cH", "#cW", "#cAct", "#cGoal"].forEach(id => $(id).addEventListener("input", drawCalc));
+  drawCalc();
   $("#grade").addEventListener("change", e => { s.grade = e.target.value.trim(); save(); toast("Gespeichert"); });
   $("#gradeSys").addEventListener("change", e => { s.gradeSystem = e.target.value; save(); toast("Gespeichert"); });
   $("#fMin").addEventListener("change", e => { const v = Math.round(num(e.target.value)); s.focusMin = v >= 1 && v <= 180 ? v : 25; e.target.value = s.focusMin; save(); toast("Gespeichert"); });
