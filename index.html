@@ -860,7 +860,9 @@ let homeAnimated = false;
 function renderHome() {
   const h = new Date().getHours(), d = new Date();
   const hi = h < 11 ? "Guten Morgen" : h < 18 ? "Hallo" : "Guten Abend";
-  const open = db.todos.filter(t => !t.done && t.due && t.due <= today()).sort((a, b) => a.due.localeCompare(b.due));
+  const isHw = t => !t.done && !t.examId && (t.subjectId || t.cat === "Schule");
+  const hw = db.todos.filter(isHw).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
+  const open = db.todos.filter(t => !t.done && t.due && t.due <= today() && !isHw(t)).sort((a, b) => a.due.localeCompare(b.due));
   const upcoming = db.todos.filter(t => !t.done && t.due && t.due > today()).length;
   const st = db.settings, tot = dayTotals(today());
   // Tagesringe
@@ -896,6 +898,15 @@ function renderHome() {
     <div class="card area-todo">
       ${cardHead("todo", "todo", "Heute zu erledigen", `<button class="btn small ghost" data-go="todos">Alle</button>`)}
       ${open.length ? open.map(todoRow).join("") : `<div class="empty">Nichts fällig.${upcoming ? ` ${upcoming} Aufgabe${upcoming > 1 ? "n" : ""} demnächst.` : ""}</div>`}
+    </div>
+
+    <div class="card area-school">
+      ${cardHead("school", "todo", "Hausaufgaben", `<button class="btn small ghost" data-go="todos">Neu</button>`)}
+      ${hw.length ? (() => {
+        const tm = addDays(today(), 1), groups = [["Überfällig", hw.filter(t => t.due && t.due < today())], ["Heute", hw.filter(t => t.due === today())], ["Morgen", hw.filter(t => t.due === tm)], ["Später", hw.filter(t => !t.due || t.due > tm)]].filter(g => g[1].length);
+        let shown = 0;
+        return groups.map(([n, l]) => { const part = l.slice(0, Math.max(0, 8 - shown)); shown += part.length; return part.length ? `<div class="group-title" style="${n === "Überfällig" ? "color:var(--critical)" : ""}">${n}</div>${part.map(todoRow).join("")}` : ""; }).join("") + (hw.length > 8 ? `<div class="small muted" style="margin-top:8px">… und ${hw.length - 8} weitere unter Todos</div>` : "");
+      })() : `<div class="empty">Keine offenen Hausaufgaben. Neue trägst du unter Todos oder direkt im Fach ein.</div>`}
     </div>
 
     ${ex.length || dc || ls.length ? `<div class="card area-school dash-link" data-go="school">
