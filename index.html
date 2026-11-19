@@ -10,6 +10,7 @@
 <meta name="theme-color" content="#0f131a">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>Tagwerk</title>
 <style>
   :root {
@@ -161,6 +162,8 @@
   .dash-link { cursor: pointer; }
   .toast { max-width: 90vw; width: max-content; text-align: center; position: fixed; left: 50%; bottom: calc(90px + var(--safe-b)); transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 18px; font-size: 14px; display: none; z-index: 60; }
   [hidden] { display: none !important; }
+  .grow, .todo .t, .entry, .ok-box, .md, h1, h2 { overflow-wrap: anywhere; }
+  .grow { min-width: 0; }
   body.gated nav.tabs { display: none; }
   body.gated { padding-bottom: 24px; }
   textarea { font: inherit; font-size: 16px; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; width: 100%; min-height: 70px; resize: vertical; }
@@ -709,6 +712,7 @@ function sleepBars7() {
 }
 
 /* ---------- Wasser & Kreatin ---------- */
+const liters = ml => (ml / 1000).toLocaleString("de-DE", { maximumFractionDigits: 2 });
 const waterOn = d => db.water.filter(w => w.date === d).reduce((t, w) => t + w.ml, 0);
 const creatineOnDay = d => db.supps.some(x => x.date === d && x.kind === "kreatin");
 function addWater(ml) {
@@ -729,7 +733,7 @@ function waterCard() {
   const ml = waterOn(today()), goal = db.settings.waterGoal || 2500, cr = creatineOnDay(today());
   const crStreak = streakFrom(new Set(db.supps.filter(x => x.kind === "kreatin").map(x => x.date)));
   return `<div class="card" style="--accent:var(--c-water)">
-    ${cardHead("water", "water", "Trinken", `<span class="small muted"><b style="color:var(--text);font-size:15px">${fmt(ml / 1000, ml % 1000 ? 2 : 0).replace(/0$/, "")}</b> / ${fmt(goal / 1000, goal % 1000 ? 1 : 0)} l</span>`)}
+    ${cardHead("water", "water", "Trinken", `<span class="small muted"><b style="color:var(--text);font-size:15px">${liters(ml)}</b> / ${liters(goal)} l</span>`)}
     <div class="drops" aria-hidden="true">${Array.from({ length: Math.min(12, Math.round(goal / 250)) }, (_, i) => `<i class="${(i + 1) * 250 <= ml + 1 ? "on" : ""}"></i>`).join("")}</div>
     <div class="row" style="margin-top:10px"><button class="btn grow wa-add" data-ml="250">+ 250 ml</button><button class="btn grow wa-add" data-ml="500">+ 500 ml</button><button class="btn ghost wa-undo" aria-label="Letzten Eintrag rückgängig" ${ml ? "" : "disabled"}>↶</button></div>
     ${db.settings.creatineOn ? `<div class="row" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -860,7 +864,7 @@ let homeAnimated = false;
 function renderHome() {
   const h = new Date().getHours(), d = new Date();
   const hi = h < 11 ? "Guten Morgen" : h < 18 ? "Hallo" : "Guten Abend";
-  const isHw = t => !t.done && !t.examId && (t.subjectId || t.cat === "Schule");
+  const isHw = t => !t.done && !t.examId && !/^Lernen: /.test(t.text) && (t.subjectId || t.cat === "Schule");
   const hw = db.todos.filter(isHw).sort((a, b) => (a.due || "9999").localeCompare(b.due || "9999"));
   const open = db.todos.filter(t => !t.done && t.due && t.due <= today() && !isHw(t)).sort((a, b) => a.due.localeCompare(b.due));
   const upcoming = db.todos.filter(t => !t.done && t.due && t.due > today()).length;
@@ -1122,7 +1126,7 @@ function gradeChart(box, gs) {
   const avg = gradeAvg(pts[0].subjectId);
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Notenverlauf">
     ${ticks.map(t => `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${Y(t) + 4}" font-size="11" fill="var(--text-3)" text-anchor="end">${t}</text>`).join("")}
-    ${avg != null ? `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="var(--text-2)" stroke-dasharray="5 4"/><text x="${W - m.r}" y="${Y(avg) - 5}" font-size="11" fill="var(--text-2)" text-anchor="end">Ø ${fmtAvg(avg)}</text>` : ""}
+    ${avg != null ? `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(avg)}" y2="${Y(avg)}" stroke="var(--text-2)" stroke-dasharray="5 4"/><text x="${W - m.r}" y="${Y(avg) + (pun ? -6 : 15)}" font-size="11" fill="var(--text-2)" text-anchor="end">Ø ${fmtAvg(avg)}</text>` : ""}
     <line class="cross" y1="${m.t}" y2="${H - m.b}" stroke="var(--text-3)" style="display:none"/>
     <path d="${pts.map((g, i) => `${i ? "L" : "M"}${xs[i]} ${Y(g.value)}`).join("")}" fill="none" stroke="var(--c-school)" stroke-width="2" stroke-linejoin="round"/>
     ${pts.map((g, i) => `<circle cx="${xs[i]}" cy="${Y(g.value)}" r="${g.type === "Klausur" ? 6 : 4}" fill="var(--c-school)" stroke="var(--surface)" stroke-width="2"/>`).join("")}
@@ -1746,9 +1750,9 @@ let learnQueue = [], learnIdx = 0, learnFlip = false, learnStats = { ok: 0, agai
 function examRow(e, deletable) {
   const n = dayDiff(today(), e.date);
   return `<div class="entry" data-exam="${e.id}"><div class="grow"><div>${esc(e.title)}</div>
-    <div class="small muted">${esc(subjName(e.subjectId))} · ${e.type} · ${WD[parse(e.date).getDay()]}, ${short(e.date)}</div></div>
-    <span class="tag" style="${n <= 3 ? "border-color:var(--accent);color:var(--text)" : ""}">${countdown(e.date)}</span>
-    ${deletable ? `<button class="btn small ghost ex-plan">${db.todos.some(t => t.examId === e.id) ? "Lernplan ✓" : "Lernplan"}</button><button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
+    <div class="small muted">${esc(subjName(e.subjectId))} · ${e.type} · ${WD[parse(e.date).getDay()]}, ${short(e.date)}${deletable ? ` · <b style="color:${n <= 3 ? "var(--accent)" : "var(--text-2)"}">${countdown(e.date)}</b>` : ""}</div></div>
+    ${deletable ? "" : `<span class="tag" style="${n <= 3 ? "border-color:var(--accent);color:var(--text)" : ""}">${countdown(e.date)}</span>`}
+    ${deletable ? `<button class="btn small ghost ex-plan">${db.todos.some(t => t.examId === e.id && !/^Lernen: /.test(t.text)) ? "Lernplan ✓" : "Lernplan"}</button><button class="icon-btn ex-del" aria-label="Löschen">✕</button>` : ""}</div>`;
 }
 /* Lernplan für eine Klausur (über die KI-App) */
 let planExam = null, planText = "";
@@ -2240,15 +2244,15 @@ function renderSubject() {
   $("#view").querySelectorAll("[data-exam] .ex-plan").forEach(b => b.addEventListener("click", () => { planExam = b.closest("[data-exam]").dataset.exam; planText = ""; drawPlan(s); $("#planWrap").scrollIntoView({ behavior: "smooth", block: "start" }); }));
   drawPlan(s);
   $("#view").querySelectorAll("[data-exam] .ex-del").forEach(b => b.addEventListener("click", () => {
-    const id = b.closest("[data-exam]").dataset.exam; if (confirm("Termin löschen?")) { db.exams = db.exams.filter(x => x.id !== id); save(); render(); }
+    const id = b.closest("[data-exam]").dataset.exam; if (confirm("Termin löschen? Offene Lern-Todos dafür werden mitgelöscht.")) { db.exams = db.exams.filter(x => x.id !== id); db.todos = db.todos.filter(t => t.done || t.examId !== id); if (planExam === id) planExam = null; save(); render(); }
   }));
   $("#exForm").addEventListener("submit", e => {
     e.preventDefault();
     const title = $("#exTitle").value.trim(), date = $("#exDate").value, type = $("#exType").value;
     if (!title || !date) return;
-    db.exams.push({ id: uid(), subjectId: s.id, title, date, type });
+    const newEx = { id: uid(), subjectId: s.id, title, date, type }; db.exams.push(newEx);
     let n = 0;
-    if ($("#exTodos").checked) [5, 3, 1].forEach(d => { const due = addDays(date, -d); if (due >= today()) { db.todos.push({ id: uid(), text: `Lernen: ${title} (${s.name})`, due, cat: "Schule", done: false, created: today() }); n++; } });
+    if ($("#exTodos").checked) [5, 3, 1].forEach(d => { const due = addDays(date, -d); if (due >= today()) { db.todos.push({ id: uid(), text: `Lernen: ${title} (${s.name})`, due, cat: "Schule", subjectId: s.id, examId: newEx.id, done: false, created: today() }); n++; } });
     save(); render(); toast(n ? `Termin + ${n} Lern-Todos angelegt` : "Termin angelegt");
   });
   $("#upBtn").addEventListener("click", () => $("#upInput").click());
@@ -2808,7 +2812,7 @@ function dayOutlook() {
   const np = nextPlan(), wk = db.workouts.filter(w => w.date >= weekStartIso()).length, tg = db.settings.trainGoal || 3;
   if (!db.workouts.some(w => w.date === td) && wk < tg) items.push(["body", "body", np ? `Training heute? Als Nächstes wäre <b>${esc(np.name)}</b> dran (${wk} von ${tg} diese Woche)` : `Training: ${wk} von ${tg} diese Woche`]);
   if (photoDue()) items.push(["body", "weight", "Heute ist Fototag: Zeit für ein neues Fortschrittsfoto"]);
-  items.push(["water", "water", `Trinkziel: ${fmt((db.settings.waterGoal || 2500) / 1000, 1)} l`]);
+  items.push(["water", "water", `Trinkziel: ${liters(db.settings.waterGoal || 2500)} l`]);
   return items;
 }
 function renderCheckin() {
