@@ -226,9 +226,9 @@
   .drops i { height: 22px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: var(--surface-2); border: 1px solid var(--border); }
   .drops i.on { background: var(--c-water); border-color: var(--c-water); }
   .phgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .ph { margin: 0; position: relative; border-radius: 10px; overflow: hidden; background: var(--surface-2); aspect-ratio: 3 / 4; }
-  .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .ph figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+  .phfig { margin: 0; position: relative; border-radius: 10px; overflow: hidden; background: var(--surface-2); aspect-ratio: 3 / 4; }
+  .phfig img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .phfig figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 6px 4px; display: flex; justify-content: space-between; font-size: 11px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.65)); }
   .ph-del { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 12px; cursor: pointer; }
   .cmp { position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
   .cmp img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
@@ -2757,7 +2757,7 @@ function renderPhotos() {
         <select id="cmpBSel" class="grow">${list.map(x => `<option value="${x.id}" ${x.id === cmpB ? "selected" : ""}>Nachher: ${short(x.date)}</option>`).join("")}</select></div>
     </div>` : ""}
     <div class="card"><h2>Verlauf: ${photoPose}</h2>
-      ${list.length ? `<div class="phgrid">${[...list].reverse().map(x => `<figure class="ph" data-id="${x.id}"><img data-ph="${x.id}" alt="Foto vom ${short(x.date)}"><figcaption><span>${short(x.date)}</span>${x.weight ? `<span>${fmt(x.weight)} kg</span>` : ""}</figcaption><button class="ph-del" aria-label="Foto löschen">✕</button></figure>`).join("")}</div>`
+      ${list.length ? `<div class="phgrid">${[...list].reverse().map(x => `<figure class="phfig" data-id="${x.id}"><img data-ph="${x.id}" alt="Foto vom ${short(x.date)}"><figcaption><span>${short(x.date)}</span>${x.weight ? `<span>${fmt(x.weight)} kg</span>` : ""}</figcaption><button class="ph-del" aria-label="Foto löschen">✕</button></figure>`).join("")}</div>`
         : `<div class="empty">Noch keine Fotos für „${photoPose}“. Mach dein erstes, dann siehst du hier deinen Verlauf.</div>`}
     </div>`;
   bindBodyHeader();
@@ -2780,8 +2780,8 @@ function renderPhotos() {
     $("#cmpASel").addEventListener("change", e => { cmpA = e.target.value; render(); });
     $("#cmpBSel").addEventListener("change", e => { cmpB = e.target.value; render(); });
   }
-  $("#view").querySelectorAll(".ph .ph-del").forEach(b => b.addEventListener("click", () => {
-    const id = b.closest(".ph").dataset.id; if (!confirm("Foto löschen?")) return;
+  $("#view").querySelectorAll(".phfig .ph-del").forEach(b => b.addEventListener("click", () => {
+    const id = b.closest(".phfig").dataset.id; if (!confirm("Foto löschen?")) return;
     removeFile(id); db.photos = db.photos.filter(x => x.id !== id); const u = photoUrls.get(id); if (u) { URL.revokeObjectURL(u); photoUrls.delete(id); }
     save(); render();
   }));
